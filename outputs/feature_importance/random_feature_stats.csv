@@ -1,0 +1,5 @@
+model_name,random_rank,random_importance,total_features,percentile
+LR_Base_Random,363,0.0011415441334006182,363,100.0
+LR_Yeo_Random,27,-0.0018919588363270235,27,100.0
+ElasticNet_LR_Base_Random,363,0.0,363,100.0
+ElasticNet_LR_Yeo_Random,27,-0.0009550402038468686,27,100.0

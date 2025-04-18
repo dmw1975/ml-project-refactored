@@ -1,0 +1,41 @@
+model_name,RMSE,MAE,MSE,R2,n_companies,n_features_used,alpha,l1_ratio,model_type,sector,type
+Sector_Consumer Discretionary_Base,2.8211667380644956,2.212868221441477,7.958981763961467,-0.8077739186854802,264,,,,Sector Linear Regression,Consumer Discretionary,Base
+Sector_Consumer Discretionary_Yeo,2.3246121572531906,1.815490729130343,5.403821681649333,-0.2274042317255487,264,,,,Sector Linear Regression,Consumer Discretionary,Yeo
+Sector_Consumer Discretionary_Base_Random,2.954583883163855,2.3430362902851165,8.729565922651604,-0.9828015774420265,264,,,,Sector Linear Regression,Consumer Discretionary,Base+Random
+Sector_Consumer Discretionary_Yeo_Random,2.3398584554739226,1.8296575118316358,5.47493759165281,-0.2435572386202245,264,,,,Sector Linear Regression,Consumer Discretionary,Yeo+Random
+Sector_Consumer Staples_Base,10.488101621735877,5.117752364471438,110.00027562785874,-37.79263558223934,157,,,,Sector Linear Regression,Consumer Staples,Base
+Sector_Consumer Staples_Yeo,14.783307401976503,3.2927049735553724,218.54617774133322,-76.07237261561649,157,,,,Sector Linear Regression,Consumer Staples,Yeo
+Sector_Consumer Staples_Base_Random,9.687224032389532,4.732546713164345,93.84230945370531,-32.09437628273866,157,,,,Sector Linear Regression,Consumer Staples,Base+Random
+Sector_Consumer Staples_Yeo_Random,20.116532448523976,3.946220994328349,404.674877752518,-141.71241569475575,157,,,,Sector Linear Regression,Consumer Staples,Yeo+Random
+Sector_Energy_Base,10.511359201741413,7.374220592422155,110.4886722680339,-22.981972351244497,98,,,,Sector Linear Regression,Energy,Base
+Sector_Energy_Yeo,4.0208769679630425,3.214093686675523,16.16745159149567,-2.5092047817965195,98,,,,Sector Linear Regression,Energy,Yeo
+Sector_Energy_Base_Random,9.35298957670342,6.1269495123631,87.47841402192282,-17.98751123839352,98,,,,Sector Linear Regression,Energy,Base+Random
+Sector_Energy_Yeo_Random,4.034706843740817,3.2020469554928868,16.27885931492898,-2.533386237580613,98,,,,Sector Linear Regression,Energy,Yeo+Random
+Sector_Financials_Base,33.58182650500544,4.195064304037216,1127.7390714122857,-303.30268146987424,352,,,,Sector Linear Regression,Financials,Base
+Sector_Financials_Yeo,6.655631843473608,1.7494167962331124,44.29743523585989,-10.952967371813456,352,,,,Sector Linear Regression,Financials,Yeo
+Sector_Financials_Base_Random,33.85235260221606,4.216793403121873,1145.9817767047643,-308.2251890591643,352,,,,Sector Linear Regression,Financials,Base+Random
+Sector_Financials_Yeo_Random,6.848253118195872,1.766201377411467,46.898570770879495,-11.654842954772368,352,,,,Sector Linear Regression,Financials,Yeo+Random
+Sector_Health Care_Base,20.49069044838225,5.373088059374632,419.8683950514235,-112.88927775285337,195,,,,Sector Linear Regression,Health Care,Base
+Sector_Health Care_Yeo,3.41493178102371,1.8402505004118073,11.661759069045768,-2.163251469639064,195,,,,Sector Linear Regression,Health Care,Yeo
+Sector_Health Care_Base_Random,19.200269728724074,5.281549950497443,368.65035765575794,-98.99638808632689,195,,,,Sector Linear Regression,Health Care,Base+Random
+Sector_Health Care_Yeo_Random,3.334629422393217,1.8421647890301436,11.11975338469052,-2.0162324592617766,195,,,,Sector Linear Regression,Health Care,Yeo+Random
+Sector_Industrials_Base,2.9908904928771727,1.8770100479333858,8.945425940383057,-1.7934221428482298,440,,,,Sector Linear Regression,Industrials,Base
+Sector_Industrials_Yeo,2.0987403807222664,1.4933209331813253,4.404711185674244,-0.3754758958282569,440,,,,Sector Linear Regression,Industrials,Yeo
+Sector_Industrials_Base_Random,3.0602069253312187,1.8916707542949636,9.364866425845152,-1.9244024167340648,440,,,,Sector Linear Regression,Industrials,Base+Random
+Sector_Industrials_Yeo_Random,2.1995986730065176,1.5001416307390623,4.838234322292034,-0.5108538126916875,440,,,,Sector Linear Regression,Industrials,Yeo+Random
+Sector_Information Technology_Base,65.94550863131569,8.431504150963768,4348.8101086429315,-1263.7228103135972,227,,,,Sector Linear Regression,Information Technology,Base
+Sector_Information Technology_Yeo,8.599159405391333,2.3836909948907103,73.94554247933023,-20.504874197371105,227,,,,Sector Linear Regression,Information Technology,Yeo
+Sector_Information Technology_Base_Random,35.9233567151052,5.5079062734421385,1290.487557680694,-374.3001418436193,227,,,,Sector Linear Regression,Information Technology,Base+Random
+Sector_Information Technology_Yeo_Random,9.152717176480477,2.4468960916871403,83.77223171264077,-23.362676150721768,227,,,,Sector Linear Regression,Information Technology,Yeo+Random
+Sector_Materials_Base,4.771705714828142,3.5649785688990225,22.76917542892355,-5.602859240259671,190,,,,Sector Linear Regression,Materials,Base
+Sector_Materials_Yeo,2.0380026260630273,1.5836855232463845,4.153454703839795,-0.20446508288618936,190,,,,Sector Linear Regression,Materials,Yeo
+Sector_Materials_Base_Random,5.012483600311689,3.578367245635815,25.124991843393627,-6.286025138348346,190,,,,Sector Linear Regression,Materials,Base+Random
+Sector_Materials_Yeo_Random,2.055273174860305,1.5859465831221975,4.224147823300358,-0.22496546150156993,190,,,,Sector Linear Regression,Materials,Yeo+Random
+Sector_Real Estate_Base,6.197791815519034,3.980746156597183,38.412623388514724,-10.545785495427364,52,,,,Sector Linear Regression,Real Estate,Base
+Sector_Real Estate_Yeo,10.223495833218848,6.013616390468544,104.51986705184316,-30.415817471919574,52,,,,Sector Linear Regression,Real Estate,Yeo
+Sector_Real Estate_Base_Random,6.964336432965734,4.3294346596608255,48.501981951533885,-13.578371126897215,52,,,,Sector Linear Regression,Real Estate,Base+Random
+Sector_Real Estate_Yeo_Random,22.41045832708366,9.044943469283554,502.22864242995337,-149.9562134433574,52,,,,Sector Linear Regression,Real Estate,Yeo+Random
+Sector_Utilities_Base,10.138586644243233,6.350600624171959,102.79093914282726,-47.500844467785235,103,,,,Sector Linear Regression,Utilities,Base
+Sector_Utilities_Yeo,2.53571686950147,1.54574508343619,6.429860042274333,-2.0338631445584525,103,,,,Sector Linear Regression,Utilities,Yeo
+Sector_Utilities_Base_Random,9.227450392297095,5.8960971074979245,85.1458407423038,-39.17518677578358,103,,,,Sector Linear Regression,Utilities,Base+Random
+Sector_Utilities_Yeo_Random,2.4373959372033105,1.538691362114225,5.940898954695204,-1.8031518984385717,103,,,,Sector Linear Regression,Utilities,Yeo+Random

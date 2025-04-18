@@ -1,0 +1,21 @@
+model_name,random_rank,random_importance,total_features,percentile
+Sector_Consumer Discretionary_Base_Random,363,-0.026572676725782785,363,100.0
+Sector_Consumer Discretionary_Yeo_Random,27,0.015463631087499263,27,100.0
+Sector_Consumer Staples_Base_Random,363,0.26699385116489793,363,100.0
+Sector_Consumer Staples_Yeo_Random,27,0.22065602823610675,27,100.0
+Sector_Energy_Base_Random,363,-0.24562213880928319,363,100.0
+Sector_Energy_Yeo_Random,27,-0.024889806679522453,27,100.0
+Sector_Financials_Base_Random,363,0.029376928188696638,363,100.0
+Sector_Financials_Yeo_Random,27,0.014305507384800187,27,100.0
+Sector_Health Care_Base_Random,363,-0.6952078514033531,363,100.0
+Sector_Health Care_Yeo_Random,27,-0.045802425424463555,27,100.0
+Sector_Industrials_Base_Random,363,-0.014578783562827935,363,100.0
+Sector_Industrials_Yeo_Random,27,-7.850017232546858e-05,27,100.0
+Sector_Information Technology_Base_Random,363,-0.37227950347616456,363,100.0
+Sector_Information Technology_Yeo_Random,27,-0.02622489478095602,27,100.0
+Sector_Materials_Base_Random,363,-0.008014165094055947,363,100.0
+Sector_Materials_Yeo_Random,27,0.012073830128343843,27,100.0
+Sector_Real Estate_Base_Random,363,0.20165022244942676,363,100.0
+Sector_Real Estate_Yeo_Random,27,2.8398240424672423,27,100.0
+Sector_Utilities_Base_Random,363,-0.35253536586181156,363,100.0
+Sector_Utilities_Yeo_Random,27,0.008433518988832711,27,100.0
