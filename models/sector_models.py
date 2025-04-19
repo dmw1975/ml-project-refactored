@@ -41,6 +41,12 @@ def run_sector_models(feature_df=None, score_df=None, base_columns=None, yeo_col
     test_size : float, default=0.2
         Proportion of data for testing
     """
+    # Force reload data module to ensure latest version
+    import importlib
+    import data
+    importlib.reload(data)
+    from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    
     print("Loading data for sector-specific models...")
     
     # Load data if not provided
@@ -53,6 +59,23 @@ def run_sector_models(feature_df=None, score_df=None, base_columns=None, yeo_col
     # Get feature sets if not provided
     if base_columns is None or yeo_columns is None:
         LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+        
+        # Direct feature count check before continuing
+        print(f"\nDIRECT FEATURE COUNT CHECK (AFTER LOADING):")
+        print(f"LR_Base column count: {len(LR_Base.columns)}")
+        print(f"LR_Yeo column count: {len(LR_Yeo.columns)}")
+        
+        # If LR_Yeo has less features, fix it directly here
+        if len(LR_Yeo.columns) < len(LR_Base.columns):
+            print(f"WARNING: LR_Yeo has fewer columns than expected, forcing fix...")
+            # Identify all Yeo-transformed columns
+            yeo_prefix = 'yeo_joh_'
+            yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
+            original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
+            categorical_columns = [col for col in LR_Base.columns if col not in original_numerical_columns]
+            complete_yeo_columns = yeo_transformed_columns + categorical_columns
+            LR_Yeo = feature_df[complete_yeo_columns].copy()
+            print(f"Fixed LR_Yeo column count: {len(LR_Yeo.columns)}")
     
     # Create random feature datasets if not provided
     if LR_Base_random is None:
@@ -63,6 +86,18 @@ def run_sector_models(feature_df=None, score_df=None, base_columns=None, yeo_col
     if LR_Yeo_random is None:
         if 'LR_Yeo' not in locals():
             _, LR_Yeo, _, _ = get_base_and_yeo_features(feature_df)
+            
+            # Check if LR_Yeo needs fixing
+            if 'LR_Base' in locals() and len(LR_Yeo.columns) < len(LR_Base.columns):
+                print(f"WARNING: LR_Yeo for random features has fewer columns than expected, forcing fix...")
+                yeo_prefix = 'yeo_joh_'
+                yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
+                original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
+                categorical_columns = [col for col in LR_Base.columns if col not in original_numerical_columns]
+                complete_yeo_columns = yeo_transformed_columns + categorical_columns
+                LR_Yeo = feature_df[complete_yeo_columns].copy()
+                print(f"Fixed LR_Yeo column count: {len(LR_Yeo.columns)}")
+        
         LR_Yeo_random = add_random_feature(LR_Yeo)
     
     # Initialize dictionary to store model metrics
@@ -122,10 +157,34 @@ def run_sector_models(feature_df=None, score_df=None, base_columns=None, yeo_col
         
         # Train and evaluate all model variations
         model_configs = [
-            {'name': f"Sector_{sector_name}_Base", 'X_train': X_train_base, 'X_test': X_test_base, 'type': 'Base'},
-            {'name': f"Sector_{sector_name}_Yeo", 'X_train': X_train_yeo, 'X_test': X_test_yeo, 'type': 'Yeo'},
-            {'name': f"Sector_{sector_name}_Base_Random", 'X_train': X_train_base_random, 'X_test': X_test_base_random, 'type': 'Base+Random'},
-            {'name': f"Sector_{sector_name}_Yeo_Random", 'X_train': X_train_yeo_random, 'X_test': X_test_yeo_random, 'type': 'Yeo+Random'}
+            {
+                'name': f"Sector_{sector_name}_Base", 
+                'X_train': X_train_base, 
+                'X_test': X_test_base, 
+                'type': 'Base',
+                'feature_list': base_columns  # Store feature list used for training
+            },
+            {
+                'name': f"Sector_{sector_name}_Yeo", 
+                'X_train': X_train_yeo, 
+                'X_test': X_test_yeo, 
+                'type': 'Yeo',
+                'feature_list': yeo_columns  # Store feature list used for training
+            },
+            {
+                'name': f"Sector_{sector_name}_Base_Random", 
+                'X_train': X_train_base_random, 
+                'X_test': X_test_base_random, 
+                'type': 'Base+Random',
+                'feature_list': list(X_train_base_random.columns)  # Store feature list with random feature
+            },
+            {
+                'name': f"Sector_{sector_name}_Yeo_Random", 
+                'X_train': X_train_yeo_random, 
+                'X_test': X_test_yeo_random, 
+                'type': 'Yeo+Random',
+                'feature_list': list(X_train_yeo_random.columns)  # Store feature list with random feature
+            }
         ]
         
         # Train and evaluate all models
@@ -149,13 +208,15 @@ def run_sector_models(feature_df=None, score_df=None, base_columns=None, yeo_col
                 'MSE': mse,
                 'R2': r2,
                 'n_companies': len(X_sector),  # Total number of companies in this sector
-                'n_companies_train': len(X_train_base),  # Companies in training set
-                'n_companies_test': len(X_test_base),  # Companies in test set
+                'n_companies_train': len(config['X_train']),  # Companies in training set
+                'n_companies_test': len(config['X_test']),  # Companies in test set
                 'model': model,
                 'y_test': y_test,
                 'y_pred': y_pred,
+                'X_test': config['X_test'],  # Store the actual X_test data
                 'sector': sector_name,
                 'type': config['type'],
+                'feature_list': config['feature_list'],  # Store feature list used for training
                 'model_type': 'Sector Linear Regression'  # For compatibility with metrics visualizations
             }
             
@@ -331,75 +392,137 @@ def analyze_sector_importance(sector_models=None, n_repeats=10):
         # Get the model
         model = model_data['model']
         
-        # Get test data
-        X_test = None
-        y_test = model_data['y_test']
-        
-        # We need to reconstruct X_test from the model
-        model_type = model_data['type']
-        sector = model_data['sector']
-        
-        # Load full dataset to get feature columns
-        feature_df = load_features_data()
-        
-        # Get sector mask
-        sector_col = f'gics_sector_{sector}'
-        if sector_col in feature_df.columns:
-            sector_mask = feature_df[sector_col] == 1
-            X_sector = feature_df[sector_mask]
+        # Get the test data DIRECTLY from the stored model data
+        # This ensures we use exactly the same data that was used for evaluation
+        if 'X_test' in model_data:
+            X_test = model_data['X_test']
+            y_test = model_data['y_test']
             
-            # Get the correct feature set based on model type
-            LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+            print(f"  Using stored X_test data with {X_test.shape[1]} features")
+        else:
+            print(f"  X_test not found in model data, attempting to reconstruct...")
             
-            if 'Base' in model_type and 'Random' not in model_type:
-                X_data = X_sector[base_columns]
-            elif 'Yeo' in model_type and 'Random' not in model_type:
-                X_data = X_sector[yeo_columns]
-            elif 'Base' in model_type and 'Random' in model_type:
-                X_base = X_sector[base_columns]
-                X_data = add_random_feature(X_base)
-            elif 'Yeo' in model_type and 'Random' in model_type:
-                X_yeo = X_sector[yeo_columns]
-                X_data = add_random_feature(X_yeo)
+            # This is the old approach - try to reconstruct the test data
+            model_type = model_data['type']
+            sector = model_data['sector']
+            y_test = model_data['y_test']
             
-            # We need to align X_test with y_test
-            X_test = X_data.loc[y_test.index]
+            # Load full dataset to get feature columns
+            feature_df = load_features_data()
+            
+            # Get sector mask
+            sector_col = f'gics_sector_{sector}'
+            if sector_col in feature_df.columns:
+                sector_mask = feature_df[sector_col] == 1
+                X_sector = feature_df[sector_mask]
+                
+                # Get the correct feature set based on model type
+                LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+                
+                if 'Base' in model_type and 'Random' not in model_type:
+                    X_data = X_sector[base_columns]
+                elif 'Yeo' in model_type and 'Random' not in model_type:
+                    X_data = X_sector[yeo_columns]
+                elif 'Base' in model_type and 'Random' in model_type:
+                    X_base = X_sector[base_columns]
+                    X_data = add_random_feature(X_base)
+                elif 'Yeo' in model_type and 'Random' in model_type:
+                    X_yeo = X_sector[yeo_columns]
+                    X_data = add_random_feature(X_yeo)
+                
+                # We need to align X_test with y_test
+                X_test = X_data.loc[y_test.index]
+                print(f"  Reconstructed X_test with {X_test.shape[1]} features")
         
         if X_test is None or X_test.empty:
-            print(f"Could not reconstruct test data for {model_name}, skipping...")
+            print(f"  Could not get test data for {model_name}, skipping...")
             continue
-        
-        # Calculate importance
-        importance_df = calculate_permutation_importance(
-            model, X_test, y_test, 
-            n_repeats=n_repeats, 
-            random_state=settings.LINEAR_REGRESSION_PARAMS['random_state']
-        )
-        
-        # Save to results
-        importance_results[model_name] = importance_df
-        
-        # Save to CSV
-        output_dir = settings.FEATURE_IMPORTANCE_DIR
-        io.ensure_dir(output_dir)
-        importance_df.to_csv(f"{output_dir}/sector_{model_name}_importance.csv", index=False)
-        
-        # Check if random feature is present
-        if 'random_feature' in importance_df['Feature'].values:
-            # Get random feature stats
-            random_row = importance_df[importance_df['Feature'] == 'random_feature']
-            random_rank = random_row.index[0] + 1
-            random_importance = random_row['Importance'].values[0]
             
-            random_feature_stats.append({
-                'model_name': model_name,
-                'random_rank': random_rank,
-                'random_importance': random_importance,
-                'total_features': len(importance_df),
-                'percentile': (random_rank / len(importance_df)) * 100
-            })
+        # Check if the model's feature set matches the test data
+        if hasattr(model, 'feature_names_in_') and set(model.feature_names_in_) != set(X_test.columns):
+            print(f"  WARNING: Feature mismatch between model and test data for {model_name}")
+            print(f"  Model features: {len(model.feature_names_in_)}, Test data features: {len(X_test.columns)}")
+            
+            # Identify missing features
+            model_features = set(model.feature_names_in_)
+            test_features = set(X_test.columns)
+            
+            missing_in_test = model_features - test_features
+            extra_in_test = test_features - model_features
+            
+            if missing_in_test:
+                print(f"  Features in model but missing in test data: {len(missing_in_test)}")
+                if len(missing_in_test) < 10:
+                    print(f"  Missing: {missing_in_test}")
+            
+            if extra_in_test:
+                print(f"  Features in test data but not in model: {len(extra_in_test)}")
+                if len(extra_in_test) < 10:
+                    print(f"  Extra: {extra_in_test}")
+            
+            # Fix the test data to match the model
+            print(f"  Aligning test data columns with model features...")
+            
+            # Create a new DataFrame with the model's features
+            aligned_X_test = pd.DataFrame(index=X_test.index)
+            
+            # Add features from X_test that are in the model
+            for feature in model.feature_names_in_:
+                if feature in X_test.columns:
+                    aligned_X_test[feature] = X_test[feature]
+                else:
+                    # Add a column of zeros for missing features
+                    print(f"  Adding zero column for missing feature: {feature}")
+                    aligned_X_test[feature] = 0
+            
+            # Use the aligned data
+            X_test = aligned_X_test
+            print(f"  Aligned X_test now has {X_test.shape[1]} features matching the model")
+            
+        # Calculate importance
+        try:
+            importance_df = calculate_permutation_importance(
+                model, X_test, y_test, 
+                n_repeats=n_repeats, 
+                random_state=settings.LINEAR_REGRESSION_PARAMS['random_state']
+            )
+            
+            # Save to results
+            importance_results[model_name] = importance_df
+            
+            # Save to CSV
+            output_dir = settings.FEATURE_IMPORTANCE_DIR
+            io.ensure_dir(output_dir)
+            importance_df.to_csv(f"{output_dir}/sector_{model_name}_importance.csv", index=False)
+            
+            # Check if random feature is present
+            if 'random_feature' in importance_df['Feature'].values:
+                # Get random feature stats
+                random_row = importance_df[importance_df['Feature'] == 'random_feature']
+                random_rank = random_row.index[0] + 1
+                random_importance = random_row['Importance'].values[0]
+                
+                random_feature_stats.append({
+                    'model_name': model_name,
+                    'random_rank': random_rank,
+                    'random_importance': random_importance,
+                    'total_features': len(importance_df),
+                    'percentile': (random_rank / len(importance_df)) * 100
+                })
+                
+        except Exception as e:
+            print(f"  ERROR calculating feature importance for {model_name}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Check if we have any importance results
+    if not importance_results:
+        print("No feature importance results were calculated. Check the errors above.")
+        return None, None
     
     # Save all importance results
+    output_dir = settings.FEATURE_IMPORTANCE_DIR
+    io.ensure_dir(output_dir)
     io.save_model(importance_results, "sector_feature_importance.pkl", output_dir)
     
     # Create random feature stats DataFrame
@@ -413,10 +536,14 @@ def analyze_sector_importance(sector_models=None, n_repeats=10):
             print(f"{row['model_name']}: Rank {row['random_rank']}/{row['total_features']} ({row['percentile']:.1f}%), Importance: {row['random_importance']:.6f}")
     
     # Create consolidated importance table
-    consolidated = create_consolidated_importance_table(importance_results)
-    
-    # Save with sector prefix
-    consolidated.to_csv(f"{output_dir}/sector_consolidated_importance.csv")
+    try:
+        consolidated = create_consolidated_importance_table(importance_results)
+        
+        # Save with sector prefix
+        consolidated.to_csv(f"{output_dir}/sector_consolidated_importance.csv")
+    except Exception as e:
+        print(f"Error creating consolidated importance table: {e}")
+        consolidated = None
     
     print("\nSector model feature importance analysis complete. Results saved to feature_importance directory.")
     return importance_results, consolidated

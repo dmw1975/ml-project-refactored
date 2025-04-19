@@ -182,12 +182,35 @@ def train_elasticnet_models(datasets=None):
     datasets : list, optional
         List of dataset names to process. If None, all datasets are processed.
     """
+    # Force reload data module to ensure latest version
+    import importlib
+    import data
+    importlib.reload(data)
+    from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    
     print("Loading data...")
     feature_df = load_features_data()
     score_df = load_scores_data()
     
     # Get feature sets
     LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+    
+    # Direct feature count check before continuing
+    print(f"\nDIRECT FEATURE COUNT CHECK (AFTER LOADING):")
+    print(f"LR_Base column count: {len(LR_Base.columns)}")
+    print(f"LR_Yeo column count: {len(LR_Yeo.columns)}")
+    
+    # If LR_Yeo has less features, fix it directly here
+    if len(LR_Yeo.columns) < len(LR_Base.columns):
+        print(f"WARNING: LR_Yeo has fewer columns than expected, forcing fix...")
+        # Identify all Yeo-transformed columns
+        yeo_prefix = 'yeo_joh_'
+        yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
+        original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
+        categorical_columns = [col for col in LR_Base.columns if col not in original_numerical_columns]
+        complete_yeo_columns = yeo_transformed_columns + categorical_columns
+        LR_Yeo = feature_df[complete_yeo_columns].copy()
+        print(f"Fixed LR_Yeo column count: {len(LR_Yeo.columns)}")
     
     # Create versions with random features
     LR_Base_random = add_random_feature(LR_Base)

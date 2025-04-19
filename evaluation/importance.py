@@ -17,24 +17,28 @@ from data import load_features_data, load_scores_data, get_base_and_yeo_features
 
 def calculate_permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42):
     """Calculate permutation importance for a model."""
-    perm_importance = permutation_importance(
-        model, X_test, y_test,
-        n_repeats=n_repeats,
-        random_state=random_state,
-        n_jobs=-1
-    )
-    
-    # Create DataFrame
-    importance_df = pd.DataFrame({
-        'Feature': X_test.columns,
-        'Importance': perm_importance.importances_mean,
-        'Std': perm_importance.importances_std
-    })
-    
-    # Sort by importance
-    importance_df = importance_df.sort_values('Importance', ascending=False)
-    
-    return importance_df
+    try:
+        perm_importance = permutation_importance(
+            model, X_test, y_test,
+            n_repeats=n_repeats,
+            random_state=random_state,
+            n_jobs=-1
+        )
+        
+        # Create DataFrame
+        importance_df = pd.DataFrame({
+            'Feature': X_test.columns,
+            'Importance': perm_importance.importances_mean,
+            'Std': perm_importance.importances_std
+        })
+        
+        # Sort by importance
+        importance_df = importance_df.sort_values('Importance', ascending=False)
+        
+        return importance_df
+    except Exception as e:
+        print(f"Error in permutation importance calculation: {e}")
+        return None
 
 def analyze_feature_importance(all_models=None):
     """Analyze feature importance for all models."""
@@ -51,24 +55,14 @@ def analyze_feature_importance(all_models=None):
     feature_df = load_features_data()
     score_df = load_scores_data()
     
-    # Get feature sets
-    LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+    # Dictionary to store the feature sets used during training
+    trained_feature_sets = {}
     
-    # Create versions with random features
-    LR_Base_random = add_random_feature(LR_Base)
-    LR_Yeo_random = add_random_feature(LR_Yeo)
-    
-    # Dictionary to map model names to datasets
-    dataset_map = {
-        'LR_Base': LR_Base,
-        'LR_Yeo': LR_Yeo,
-        'LR_Base_Random': LR_Base_random,
-        'LR_Yeo_Random': LR_Yeo_random,
-        'ElasticNet_LR_Base': LR_Base,
-        'ElasticNet_LR_Yeo': LR_Yeo,
-        'ElasticNet_LR_Base_Random': LR_Base_random,
-        'ElasticNet_LR_Yeo_Random': LR_Yeo_random
-    }
+    # For each model, store its feature set
+    for model_name, model_data in all_models.items():
+        model = model_data['model']
+        if hasattr(model, 'feature_names_in_'):
+            trained_feature_sets[model_name] = model.feature_names_in_
     
     # Calculate importance for each model
     importance_results = {}
@@ -80,67 +74,162 @@ def analyze_feature_importance(all_models=None):
         # Get the model
         model = model_data['model']
         
-        # Get corresponding dataset
-        X_data = dataset_map.get(model_name, None)
-        if X_data is None:
-            print(f"No matching dataset found for {model_name}, skipping...")
-            continue
-        
-        # Get test data
+        # Get test data indices
         y_test = model_data['y_test']
-        y_pred = model_data['y_pred']
+        test_indices = y_test.index if hasattr(y_test, 'index') else np.arange(len(y_test))
         
-        # We need to align X_test with y_test
-        X_test = X_data.loc[y_test.index]
+        # Use the original feature dataframe and extract only the needed features
+        X_test = None  # Initialize to None to check if it gets set properly
+        
+        if model_name in trained_feature_sets:
+            feature_names = trained_feature_sets[model_name]
+            
+            # Check if all required features exist in the original dataframe
+            missing_features = [f for f in feature_names if f not in feature_df.columns]
+            
+            # Handle missing features
+            if missing_features:
+                print(f"Warning: {len(missing_features)} features used in training are missing in original dataset")
+                print(f"First few missing: {missing_features[:5]}")
+                
+                # Check if only the random feature is missing
+                if len(missing_features) == 1 and missing_features[0] == 'random_feature':
+                    print("Only random feature is missing, attempting to reconstruct...")
+                    try:
+                        # For Yeo models with random feature, we need to be more careful
+                        if "Yeo" in model_name:
+                            # Get the feature names from the model (excluding the random feature)
+                            model_features = [f for f in feature_names if f != 'random_feature']
+                            
+                            # Create a DataFrame with all those features from the original data
+                            required_features = [f for f in model_features if f in feature_df.columns]
+                            
+                            # Check if we have all the required features
+                            if len(required_features) != len(model_features):
+                                print(f"Missing {len(model_features) - len(required_features)} required features, cannot reconstruct")
+                                continue  # Skip this model
+                                
+                            # Build dataset from the original features
+                            base_df = feature_df[required_features].copy()
+                            
+                            # Add random feature
+                            X_data = add_random_feature(base_df)
+                            
+                            # Use only test indices
+                            X_test = X_data.loc[test_indices]
+                            
+                            # Make sure feature order exactly matches what the model expects
+                            X_test = X_test[feature_names]
+                        else:
+                            # For non-Yeo models with random feature
+                            base_df, _, _, _ = get_base_and_yeo_features(feature_df)
+                            X_data = add_random_feature(base_df)
+                            X_test = X_data.loc[test_indices]
+                            
+                            # Make sure feature order exactly matches what the model expects
+                            if not all(f in X_test.columns for f in feature_names):
+                                print("Error: Not all required features available after reconstruction")
+                                continue  # Skip this model
+                                
+                            X_test = X_test[feature_names]
+                            
+                        print(f"Successfully reconstructed dataset with random feature, shape: {X_test.shape}")
+                        
+                    except Exception as e:
+                        print(f"Error reconstructing random feature: {e}")
+                        continue  # Skip this model
+                else:
+                    print("Multiple features missing, skipping importance calculation for this model")
+                    continue  # Skip this model
+            else:
+                # Extract just the test set with the correct features
+                X_test = feature_df.loc[test_indices, feature_names]
+        else:
+            print(f"No feature information available for model {model_name}, skipping")
+            continue  # Skip this model
+            
+        # Verify we have a valid X_test dataset
+        if X_test is None or X_test.empty:
+            print(f"Error: Failed to create valid test dataset for {model_name}")
+            continue  # Skip this model
+            
+        # Double-check feature alignment
+        if not all(f in X_test.columns for f in feature_names):
+            print(f"Error: Feature mismatch after dataset preparation")
+            missing = [f for f in feature_names if f not in X_test.columns]
+            print(f"Missing features: {missing[:5]}")
+            continue  # Skip this model
+            
+        # Additional debug output
+        print(f"Ready to calculate importance with dataset shape: {X_test.shape}")
         
         # Calculate importance
-        importance_df = calculate_permutation_importance(
-            model, X_test, y_test, 
-            n_repeats=10, 
-            random_state=settings.LINEAR_REGRESSION_PARAMS['random_state']
-        )
-        
-        # Save to results
-        importance_results[model_name] = importance_df
-        
-        # Save to CSV
-        output_dir = settings.FEATURE_IMPORTANCE_DIR
-        io.ensure_dir(output_dir)
-        importance_df.to_csv(f"{output_dir}/{model_name}_importance.csv", index=False)
-        
-        # Check if random feature is present
-        if 'random_feature' in importance_df['Feature'].values:
-            # Get random feature stats
-            random_row = importance_df[importance_df['Feature'] == 'random_feature']
-            random_rank = random_row.index[0] + 1
-            random_importance = random_row['Importance'].values[0]
+        try:
+            print(f"Starting importance calculation for {model_name}...")
+            importance_df = calculate_permutation_importance(
+                model, X_test, y_test, 
+                n_repeats=10, 
+                random_state=settings.LINEAR_REGRESSION_PARAMS['random_state']
+            )
             
-            random_feature_stats.append({
-                'model_name': model_name,
-                'random_rank': random_rank,
-                'random_importance': random_importance,
-                'total_features': len(importance_df),
-                'percentile': (random_rank / len(importance_df)) * 100
-            })
+            if importance_df is None:
+                print(f"Skipping {model_name} due to error in importance calculation")
+                continue
+                
+            print(f"Importance calculation successful for {model_name}")
+                
+            # Save to results
+            importance_results[model_name] = importance_df
+            
+            # Save to CSV
+            output_dir = settings.FEATURE_IMPORTANCE_DIR
+            io.ensure_dir(output_dir)
+            importance_df.to_csv(f"{output_dir}/{model_name}_importance.csv", index=False)
+            
+            # Check if random feature is present
+            if 'random_feature' in importance_df['Feature'].values:
+                # Get random feature stats
+                random_row = importance_df[importance_df['Feature'] == 'random_feature']
+                random_rank = random_row.index[0] + 1
+                random_importance = random_row['Importance'].values[0]
+                
+                random_feature_stats.append({
+                    'model_name': model_name,
+                    'random_rank': random_rank,
+                    'random_importance': random_importance,
+                    'total_features': len(importance_df),
+                    'percentile': (random_rank / len(importance_df)) * 100
+                })
+        except Exception as e:
+            print(f"Error calculating importance for {model_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
     
     # Save all importance results
-    io.save_model(importance_results, "feature_importance.pkl", output_dir)
-    
-    # Create random feature stats DataFrame
-    if random_feature_stats:
-        random_df = pd.DataFrame(random_feature_stats)
-        random_df.to_csv(f"{output_dir}/random_feature_stats.csv", index=False)
+    if importance_results:
+        output_dir = settings.FEATURE_IMPORTANCE_DIR
+        io.ensure_dir(output_dir)
+        io.save_model(importance_results, "feature_importance.pkl", output_dir)
         
-        print("\nRandom Feature Performance:")
-        print("==========================")
-        for _, row in random_df.iterrows():
-            print(f"{row['model_name']}: Rank {row['random_rank']}/{row['total_features']} ({row['percentile']:.1f}%), Importance: {row['random_importance']:.6f}")
-    
-    # Create consolidated importance table
-    consolidated = create_consolidated_importance_table(importance_results)
-    
-    print("\nFeature importance analysis complete. Results saved to feature_importance directory.")
-    return importance_results, consolidated
+        # Create random feature stats DataFrame
+        if random_feature_stats:
+            random_df = pd.DataFrame(random_feature_stats)
+            random_df.to_csv(f"{output_dir}/random_feature_stats.csv", index=False)
+            
+            print("\nRandom Feature Performance:")
+            print("==========================")
+            for _, row in random_df.iterrows():
+                print(f"{row['model_name']}: Rank {row['random_rank']}/{row['total_features']} ({row['percentile']:.1f}%), Importance: {row['random_importance']:.6f}")
+        
+        # Create consolidated importance table
+        consolidated = create_consolidated_importance_table(importance_results)
+        
+        print("\nFeature importance analysis complete. Results saved to feature_importance directory.")
+        return importance_results, consolidated
+    else:
+        print("No successful importance calculations. Check the errors above.")
+        return None, None
 
 def create_consolidated_importance_table(importance_results):
     """Create a consolidated table of feature importance across models."""

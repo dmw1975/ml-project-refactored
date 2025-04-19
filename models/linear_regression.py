@@ -51,6 +51,9 @@ def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=
     
     Returns a dictionary with model performance metrics.
     """
+    # Print number of features being used
+    print(f"  Features for {model_name}: {X_data.shape[1]}")
+    
     # Use stratified split by sector
     X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
         X_data, y_data, test_size=test_size, random_state=random_state
@@ -73,6 +76,7 @@ def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=
     print(f"  MAE : {mae:.4f}")
     print(f"  MSE : {mse:.4f}")
     print(f"  R²  : {r2:.4f}")
+    print(f"  Features used: {model.coef_.shape[0]}")
     
     # Return metrics and model
     return {
@@ -86,23 +90,69 @@ def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=
         'n_companies_train': len(X_train),
         'n_companies_test': len(X_test),
         'y_test': y_test,
-        'y_pred': y_pred
+        'y_pred': y_pred,
+        'n_features': model.coef_.shape[0]
     }
 
 def train_all_models():
     """
     Train all linear regression model variants and save results.
     """
+    # Force reload data module to ensure latest version
+    import importlib
+    import data
+    importlib.reload(data)
+    from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    
     print("Loading data...")
     feature_df = load_features_data()
     score_df = load_scores_data()
     
-    # Get feature sets
+    # Get feature sets with direct debug
     LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+    
+    # Direct feature count check before continuing
+    print(f"\nDIRECT FEATURE COUNT CHECK (AFTER LOADING):")
+    print(f"LR_Base column count: {len(LR_Base.columns)}")
+    print(f"LR_Yeo column count: {len(LR_Yeo.columns)}")
+    
+    # If LR_Yeo has less features, fix it directly here
+    if len(LR_Yeo.columns) < len(LR_Base.columns):
+        print(f"WARNING: LR_Yeo has fewer columns than expected, forcing fix...")
+        # Identify all Yeo-transformed columns
+        yeo_prefix = 'yeo_joh_'
+        yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
+        original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
+        categorical_columns = [col for col in LR_Base.columns if col not in original_numerical_columns]
+        complete_yeo_columns = yeo_transformed_columns + categorical_columns
+        LR_Yeo = feature_df[complete_yeo_columns].copy()
+        print(f"Fixed LR_Yeo column count: {len(LR_Yeo.columns)}")
+    
+    # FEATURE COUNT VALIDATION
+    print("\n" + "="*50)
+    print("FEATURE COUNT VALIDATION")
+    print("="*50)
+    print(f"LR_Base: {LR_Base.shape[1]} features")
+    print(f"LR_Yeo: {LR_Yeo.shape[1]} features")
+    
+    # Print the first few feature names for each dataset to verify content
+    print("\nSample LR_Base features:")
+    print(", ".join(LR_Base.columns[:5]))
+    print("\nSample LR_Yeo features:")
+    print(", ".join(LR_Yeo.columns[:5]))
+    
+    # Check for Yeo-transformed features
+    yeo_transformed_count = sum(1 for col in LR_Yeo.columns if col.startswith('yeo_joh_'))
+    print(f"\nYeo-transformed features in LR_Yeo: {yeo_transformed_count}")
     
     # Create versions with random features
     LR_Base_random = add_random_feature(LR_Base)
     LR_Yeo_random = add_random_feature(LR_Yeo)
+    
+    # Check counts after adding random feature
+    print(f"\nLR_Base_random: {LR_Base_random.shape[1]} features")
+    print(f"LR_Yeo_random: {LR_Yeo_random.shape[1]} features")
+    print("="*50)
     
     # Target variable
     y = score_df
@@ -121,6 +171,10 @@ def train_all_models():
         {'data': LR_Base_random, 'name': 'LR_Base_Random'},
         {'data': LR_Yeo_random, 'name': 'LR_Yeo_Random'}
     ]
+    
+    # Print feature counts for each dataset before training
+    for config in datasets:
+        print(f"Dataset {config['name']} has {config['data'].shape[1]} features")
     
     # Train all models
     for config in datasets:
@@ -146,13 +200,19 @@ def train_all_models():
             'MAE': metrics['MAE'],
             'MSE': metrics['MSE'],
             'R2': metrics['R2'],
-            'n_companies': metrics['n_companies']
+            'n_companies': metrics['n_companies'],
+            'n_features': metrics['model'].coef_.shape[0]  # Add feature count to metrics
         }
         for name, metrics in model_results.items()
     ])
     
     io.ensure_dir(settings.METRICS_DIR)
     metrics_df.to_csv(f"{settings.METRICS_DIR}/linear_regression_metrics.csv", index=False)
+    
+    # Print final feature counts used by each model
+    print("\nFeature counts used by each model:")
+    for name, metrics in model_results.items():
+        print(f"{name}: {metrics['model'].coef_.shape[0]} features")
     
     print("\nLinear regression models trained and saved successfully.")
     return model_results
