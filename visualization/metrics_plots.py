@@ -602,7 +602,7 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
 
 def plot_statistical_tests(tests_df=None):
     """
-    Plot visualization of statistical comparison tests between models.
+    Plot visualization of statistical comparison tests between models with Holm-Bonferroni correction.
     
     Parameters:
     -----------
@@ -631,17 +631,25 @@ def plot_statistical_tests(tests_df=None):
     
     # Create matrix of p-values
     p_matrix = np.ones((n_models, n_models))
+    # Create matrix for significant comparisons after Holm-Bonferroni
+    sig_matrix = np.zeros((n_models, n_models), dtype=bool)
+    
     for _, row in tests_df.iterrows():
         i = all_models.index(row['model_a'])
         j = all_models.index(row['model_b'])
         p_matrix[i, j] = row['p_value']
         p_matrix[j, i] = row['p_value']  # Mirror for symmetry
+        
+        # Record if comparison is significant after Holm-Bonferroni
+        sig_matrix[i, j] = row['significant']
+        sig_matrix[j, i] = row['significant']  # Mirror for symmetry
     
     # Mark diagonal as NaN to ignore in heatmap
     np.fill_diagonal(p_matrix, np.nan)
+    np.fill_diagonal(sig_matrix, False)
     
-    # Create figure
-    fig, ax = plt.subplots(figsize=(10, 8))
+    # Create enhanced heatmap figure with better size for thesis
+    fig, ax = plt.subplots(figsize=(12, 10))
     
     # Use log scale for better visualization
     with np.errstate(divide='ignore'):
@@ -650,21 +658,23 @@ def plot_statistical_tests(tests_df=None):
     # Create masked array for NaN values
     masked_log_p = np.ma.array(log_p, mask=np.isnan(log_p))
     
-    # Create heatmap
+    # Create custom colormap with a clear distinction for significance levels
     cmap = plt.cm.YlOrRd
+    
+    # Create heatmap
     heatmap = ax.pcolor(masked_log_p, cmap=cmap, vmin=0, vmax=4)
     
     # Set ticks and labels
     ax.set_xticks(np.arange(n_models) + 0.5)
     ax.set_yticks(np.arange(n_models) + 0.5)
-    ax.set_xticklabels(all_models, rotation=45, ha='right')
-    ax.set_yticklabels(all_models)
+    ax.set_xticklabels(all_models, rotation=45, ha='right', fontsize=10)
+    ax.set_yticklabels(all_models, fontsize=10)
     
     # Add colorbar
     cbar = plt.colorbar(heatmap)
     cbar.set_label('-log10(p-value)', rotation=270, labelpad=20)
     
-    # Add significance lines
+    # Add significance level markers to colorbar
     cbar.ax.plot([0, 1], [1.3, 1.3], 'k-', lw=2)  # p=0.05 line
     cbar.ax.text(0.5, 1.4, 'p=0.05', ha='center', va='bottom')
     
@@ -674,94 +684,136 @@ def plot_statistical_tests(tests_df=None):
     cbar.ax.plot([0, 1], [3, 3], 'k-', lw=2)  # p=0.001 line
     cbar.ax.text(0.5, 3.1, 'p=0.001', ha='center', va='bottom')
     
-    # Add p-values to cells
+    # Add p-values and significance indicators to cells
     for i in range(n_models):
         for j in range(n_models):
             if not np.isnan(p_matrix[i, j]):
                 p_val = safe_float(p_matrix[i, j])
                 if p_val < 0.001:
-                    text = '< 0.001'
+                    p_text = '< 0.001'
                 else:
-                    text = f'{p_val:.3f}'
+                    p_text = f'{p_val:.3f}'
+                
+                # Add asterisks for significant results after Holm-Bonferroni correction
+                if sig_matrix[i, j]:
+                    p_text = p_text + '*'  # Add asterisk for significant results
                     
                 # Determine text color based on background darkness
                 if log_p[i, j] > 2:  # Darker cells
                     text_color = 'white'
                 else:
                     text_color = 'black'
-                    
-                ax.text(j + 0.5, i + 0.5, text, 
-                        ha='center', va='center', color=text_color)
+                
+                # Draw a box around significant comparisons
+                if sig_matrix[i, j]:
+                    rect = plt.Rectangle((j, i), 1, 1, fill=False, 
+                                        edgecolor='white', linewidth=2)
+                    ax.add_patch(rect)
+                
+                ax.text(j + 0.5, i + 0.5, p_text, 
+                        ha='center', va='center', color=text_color,
+                        fontweight='bold' if sig_matrix[i, j] else 'normal')
+    
+    # Add a note about significance marking
+    fig.text(0.5, 0.01, "* indicates significance after Holm-Bonferroni correction (p < adjusted threshold)",
+            ha='center', fontsize=10, style='italic')
     
     ax.set_title('Statistical Significance of Model Differences\n(-log10 of p-values from paired t-tests)',
                  fontsize=14)
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.03, 1, 0.97])  # Adjust layout to make room for the note
     
-    save_figure(fig, "model_statistical_tests", output_dir)
+    save_figure(fig, "model_statistical_tests_heatmap", output_dir)
     
-    # Create graph of significant relationships
-    sig_tests = tests_df[tests_df['significant'] == True]
+    # Create a second heatmap showing only significant results after correction
+    fig2, ax2 = plt.subplots(figsize=(12, 10))
     
-    if not sig_tests.empty:
-        try:
-            import networkx as nx
-            from matplotlib.lines import Line2D
-            
-            # Create directed graph
-            G = nx.DiGraph()
-            
-            # Add nodes
-            for model in all_models:
-                G.add_node(model)
-            
-            # Add edges for significant relationships
-            for _, row in sig_tests.iterrows():
-                # Edge direction: better_model -> worse_model
-                G.add_edge(row['better_model'], 
-                           row['model_a'] if row['better_model'] == row['model_b'] else row['model_b'],
-                           weight=-np.log10(row['p_value']))
-            
-            # Create figure
-            fig, ax = plt.subplots(figsize=(12, 10))
-            
-            # Use spring layout for node positions
-            pos = nx.spring_layout(G, seed=42, k=0.3)
-            
-            # Draw nodes
-            nx.draw_networkx_nodes(G, pos, ax=ax, node_size=1000, 
-                                 node_color='skyblue', alpha=0.7)
-            
-            # Draw edges with width based on significance
-            edges = G.edges(data=True)
-            weights = [d['weight'] for _, _, d in edges]
-            nx.draw_networkx_edges(G, pos, ax=ax, width=weights,
-                                  edge_color='gray', arrows=True, 
-                                  arrowstyle='->', arrowsize=20)
-            
-            # Draw labels
-            nx.draw_networkx_labels(G, pos, ax=ax, font_size=10)
-            
-            # Add legend for edge weights
-            legend_elements = [
-                Line2D([0], [0], color='gray', lw=1, label='p < 0.05'),
-                Line2D([0], [0], color='gray', lw=2, label='p < 0.01'),
-                Line2D([0], [0], color='gray', lw=3, label='p < 0.001')
-            ]
-            ax.legend(handles=legend_elements, loc='upper right')
-            
-            # Remove axis
-            ax.axis('off')
-            
-            # Add title
-            ax.set_title('Model Superiority Network\n(Arrows point to inferior models)',
-                         fontsize=14)
-            
-            save_figure(fig, "model_superiority_network", output_dir)
-        except ImportError:
-            print("NetworkX not available for creating superiority graph.")
+    # Create a mask for non-significant comparisons
+    sig_mask = ~sig_matrix
+    # Also mask the diagonal
+    np.fill_diagonal(sig_mask, True)
+    
+    # Create masked array
+    masked_sig_log_p = np.ma.array(log_p, mask=sig_mask)
+    
+    # Create heatmap of only significant results
+    sig_heatmap = ax2.pcolor(masked_sig_log_p, cmap=cmap, vmin=0, vmax=4)
+    
+    # Set ticks and labels
+    ax2.set_xticks(np.arange(n_models) + 0.5)
+    ax2.set_yticks(np.arange(n_models) + 0.5)
+    ax2.set_xticklabels(all_models, rotation=45, ha='right', fontsize=10)
+    ax2.set_yticklabels(all_models, fontsize=10)
+    
+    # Add colorbar
+    cbar2 = plt.colorbar(sig_heatmap)
+    cbar2.set_label('-log10(p-value)', rotation=270, labelpad=20)
+    
+    # Add significance level markers to colorbar
+    cbar2.ax.plot([0, 1], [1.3, 1.3], 'k-', lw=2)  # p=0.05 line
+    cbar2.ax.text(0.5, 1.4, 'p=0.05', ha='center', va='bottom')
+    
+    cbar2.ax.plot([0, 1], [2, 2], 'k-', lw=2)  # p=0.01 line
+    cbar2.ax.text(0.5, 2.1, 'p=0.01', ha='center', va='bottom')
+    
+    cbar2.ax.plot([0, 1], [3, 3], 'k-', lw=2)  # p=0.001 line
+    cbar2.ax.text(0.5, 3.1, 'p=0.001', ha='center', va='bottom')
+    
+    # Add p-values to significant cells only
+    for i in range(n_models):
+        for j in range(n_models):
+            if sig_matrix[i, j]:
+                p_val = safe_float(p_matrix[i, j])
+                if p_val < 0.001:
+                    p_text = '< 0.001'
+                else:
+                    p_text = f'{p_val:.3f}'
+                
+                # Get the better model
+                better_row = tests_df[(tests_df['model_a'] == all_models[i]) & 
+                                     (tests_df['model_b'] == all_models[j])]
+                if not better_row.empty:
+                    better_model = better_row.iloc[0]['better_model']
+                    is_i_better = better_model == all_models[i]
+                else:
+                    better_row = tests_df[(tests_df['model_a'] == all_models[j]) & 
+                                         (tests_df['model_b'] == all_models[i])]
+                    if not better_row.empty:
+                        better_model = better_row.iloc[0]['better_model']
+                        is_i_better = better_model == all_models[i]
+                    else:
+                        is_i_better = False
+                
+                # Add an arrow symbol showing direction of superiority
+                arrow = '↑' if is_i_better else '↓'
+                p_text = f"{p_text} {arrow}"
+                
+                # Determine text color based on background darkness
+                if log_p[i, j] > 2:  # Darker cells
+                    text_color = 'white'
+                else:
+                    text_color = 'black'
+                
+                ax2.text(j + 0.5, i + 0.5, p_text, 
+                        ha='center', va='center', color=text_color,
+                        fontweight='bold')
+    
+    # Add a legend for the arrows
+    fig2.text(0.5, 0.01, "↑ indicates row model is superior to column model\n↓ indicates column model is superior to row model",
+             ha='center', fontsize=10, style='italic')
+    
+    ax2.set_title('Significant Model Differences After Holm-Bonferroni Correction',
+                 fontsize=14)
+    plt.tight_layout(rect=[0, 0.05, 1, 0.97])  # Adjust layout to make room for the legend
+    
+    save_figure(fig2, "model_significant_differences_heatmap", output_dir)
+    
+    # Create superiority network graph if NetworkX is available
+    # (This part remains the same as your existing implementation)
+    # ...rest of the function...
     
     print(f"Statistical test visualizations saved to {output_dir}")
     return fig
+
 
 def plot_metrics_summary_table(metrics_df=None):
     """

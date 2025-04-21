@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument('--all-sector', action='store_true', help='Run the entire sector model pipeline')
     parser.add_argument('--sector-only', action='store_true', 
                     help='Run only sector models, skipping standard models')
+    parser.add_argument('--vif', action='store_true', help='Analyze multicollinearity using VIF')
     return parser.parse_args()
 
 def main():

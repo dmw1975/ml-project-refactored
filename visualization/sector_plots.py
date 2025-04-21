@@ -352,6 +352,9 @@ def visualize_sector_models(run_all=False):
     plot_sector_model_comparison()
     plot_sector_feature_importance()
     
+    # Add call to the new metrics summary table function
+    plot_sector_metrics_summary_table()
+    
     # Optionally run standard visualizations with sector data
     if run_all:
         # Set up sector-specific output directory
@@ -396,3 +399,115 @@ def visualize_sector_models(run_all=False):
 if __name__ == "__main__":
     # Run all sector visualizations
     visualize_sector_models(run_all=True)
+
+def plot_sector_metrics_summary_table(metrics_df=None):
+    """
+    Create a summary table visualization of sector model performance metrics.
+    
+    Parameters:
+    -----------
+    metrics_df : pandas.DataFrame, optional
+        DataFrame containing sector model metrics. If None, it will be loaded.
+    """
+    # Set up style
+    style = setup_visualization_style()
+    
+    # Load metrics if not provided
+    if metrics_df is None:
+        metrics_file = settings.METRICS_DIR / "sector_models_metrics.csv"
+        if metrics_file.exists():
+            metrics_df = pd.read_csv(metrics_file)
+        else:
+            print("No sector metrics data found. Please run sector model evaluation first.")
+            return None
+    
+    # Set up output directory
+    output_dir = settings.VISUALIZATION_DIR / "sectors"
+    io.ensure_dir(output_dir)
+    
+    # Select and rename columns for the table
+    if 'model_name' in metrics_df.columns:
+        metrics_df = metrics_df.rename(columns={'model_name': 'Model'})
+    elif 'index' in metrics_df.columns:
+        metrics_df = metrics_df.rename(columns={'index': 'Model'})
+    
+    # Make sure R² is spelled correctly
+    if 'R2' in metrics_df.columns and 'R²' not in metrics_df.columns:
+        metrics_df = metrics_df.rename(columns={'R2': 'R²'})
+    
+    # Select only the required columns (excluding sector and type)
+    table_columns = ['Model', 'MSE', 'MAE', 'RMSE', 'R²', 'n_companies']
+    
+    # Filter columns that exist in the DataFrame
+    available_columns = [col for col in table_columns if col in metrics_df.columns]
+    table_data = metrics_df[available_columns].copy()
+    
+    # Convert n_companies to integer
+    if 'n_companies' in table_data.columns:
+        table_data['n_companies'] = table_data['n_companies'].astype(int)
+    
+    # Create figure - increase height for more rows and width for model names
+    plt.figure(figsize=(16, len(table_data) * 0.5 + 1))
+    
+    # Create a table with no cells, just the data
+    ax = plt.subplot(111, frame_on=False)
+    ax.xaxis.set_visible(False)
+    ax.yaxis.set_visible(False)
+    
+    # Create cell colors array - initialize with white
+    colors = [['white' for _ in range(len(table_data.columns))] for _ in range(len(table_data))]
+    
+    # Highlight cells with positive R² values
+    if 'R²' in table_data.columns:
+        r2_col_idx = list(table_data.columns).index('R²')
+        for i, row in enumerate(table_data.values):
+            r2_value = row[r2_col_idx]
+            if r2_value > 0:
+                colors[i][r2_col_idx] = '#d9ead3'  # Light green for positive R²
+    
+    # Convert values to formatted strings
+    cell_text = []
+    for row in table_data.values:
+        row_text = []
+        for i, val in enumerate(row):
+            col_name = table_data.columns[i]
+            if col_name == 'Model':
+                # Just use the string value for model name
+                row_text.append(str(val))
+            elif col_name == 'n_companies':
+                # Format as integer
+                row_text.append(f"{int(val)}")
+            elif isinstance(val, (int, float, np.number)):
+                # Format other numeric columns
+                row_text.append(f"{val:.4f}")
+            else:
+                row_text.append(str(val))
+        cell_text.append(row_text)
+    
+    # Set column widths, making Model column wider
+    col_widths = [0.4 if table_data.columns[i] == 'Model' else 0.12 for i in range(len(table_data.columns))]
+    
+    # Create the table with adjusted column widths
+    table = plt.table(
+        cellText=cell_text,
+        colLabels=table_data.columns,
+        cellColours=colors,
+        cellLoc='center',
+        loc='center',
+        colWidths=col_widths
+    )
+    
+    # Adjust font size and spacing
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1.2, 1.5)
+    
+    plt.title('Sector Models Performance Metrics Summary', fontsize=16, pad=20)
+    plt.tight_layout()
+    
+    # Save the figure
+    save_figure(plt.gcf(), "sector_metrics_summary_table", output_dir)
+    plt.close()
+    
+    print(f"Sector metrics summary table saved to {output_dir}")
+    return table_data

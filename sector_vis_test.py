@@ -1,0 +1,2 @@
+from visualization.sector_plots import visualize_sector_models
+visualize_sector_models()
