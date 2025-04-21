@@ -208,11 +208,11 @@ def plot_sector_model_comparison():
     
     print(f"Sector model comparison plots saved to {output_dir}")
     return fig
-
+"""
 def plot_sector_feature_importance():
-    """
+    
     Create visualizations for sector model feature importance.
-    """
+    
     # Set up style
     style = setup_visualization_style()
     
@@ -335,6 +335,7 @@ def plot_sector_feature_importance():
     
     print(f"Sector feature importance visualizations saved to {output_dir}")
     return importance_results
+"""
 
 def visualize_sector_models(run_all=False):
     """
@@ -349,12 +350,13 @@ def visualize_sector_models(run_all=False):
     print("Generating sector model visualizations...")
     
     # Create sector-specific visualizations
-    plot_sector_model_comparison()
-    plot_sector_feature_importance()
+    plot_sector_model_comparison()  # UNCOMMENT THIS LINE
+    #plot_sector_feature_importance()
     
     # Add call to the new metrics summary table function
     plot_sector_metrics_summary_table()
     
+    '''
     # Optionally run standard visualizations with sector data
     if run_all:
         # Set up sector-specific output directory
@@ -393,12 +395,9 @@ def visualize_sector_models(run_all=False):
             plot_feature_importance_by_model(importance_results)
         except:
             print("Could not load sector feature importance data.")
+    '''
     
     print("Sector model visualizations completed.")
-
-if __name__ == "__main__":
-    # Run all sector visualizations
-    visualize_sector_models(run_all=True)
 
 def plot_sector_metrics_summary_table(metrics_df=None):
     """
@@ -511,3 +510,8 @@ def plot_sector_metrics_summary_table(metrics_df=None):
     
     print(f"Sector metrics summary table saved to {output_dir}")
     return table_data
+
+if __name__ == "__main__":
+    # Run all sector visualizations
+    visualize_sector_models(run_all=True)
+

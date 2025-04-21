@@ -85,6 +85,19 @@ def main():
             plot_statistical_tests()
             plot_elasticnet_cv_distribution()
             plot_metrics_summary_table()
+            
+            # Add feature visualization calls
+            print("Creating feature importance visualizations...")
+            from visualization.feature_plots import plot_top_features, plot_feature_importance_by_model, plot_feature_correlations
+            plot_top_features()
+            plot_feature_importance_by_model()
+            plot_feature_correlations()
+
+    # VIF analysis can be run separately
+    if args.all or args.vif:
+        print("\nAnalyzing multicollinearity using VIF...")
+        from evaluation.multicollinearity import analyze_multicollinearity
+        base_vif, yeo_vif = analyze_multicollinearity()
 
     # Sector model pipeline
     if args.all_sector or args.train_sector:

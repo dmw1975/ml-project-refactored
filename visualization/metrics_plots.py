@@ -298,60 +298,6 @@ def plot_model_comparison(metrics_df=None):
     plt.tight_layout(pad=2.0)
     save_figure(fig, "model_metrics_comparison", output_dir)
     
-    # 2. Create radar chart for multi-metric comparison
-    # Get top models for radar chart (max 5 for readability)
-    top_models = metrics_df.sort_values('RMSE').head(5)
-    
-    fig = plt.figure(figsize=(12, 12))
-    ax = fig.add_subplot(111, polar=True)
-    
-    # Define metrics to include
-    metrics = ['RMSE', 'MAE', 'R2']
-    
-    # Normalize metrics to 0-1 scale (invert for error metrics)
-    normalized = {}
-    for model in top_models['model_name']:
-        model_data = metrics_df[metrics_df['model_name'] == model]
-        
-        # For RMSE and MAE, lower is better, so invert
-        rmse_norm = 1 - (model_data['RMSE'].values[0] / metrics_df['RMSE'].max())
-        mae_norm = 1 - (model_data['MAE'].values[0] / metrics_df['MAE'].max())
-        
-        # For R², higher is better
-        r2_min = min(0, metrics_df['R2'].min())  # Handle negative R²
-        r2_max = max(0.5, metrics_df['R2'].max())  # Ensure positive range
-        r2_range = r2_max - r2_min
-        r2_norm = (model_data['R2'].values[0] - r2_min) / r2_range
-        
-        normalized[model] = [rmse_norm, mae_norm, r2_norm]
-    
-    # Setup angles for radar chart
-    angles = np.linspace(0, 2*np.pi, len(metrics) + 1, endpoint=True)
-    
-    # Set labels with description
-    labels = ['RMSE\n(inverted)', 'MAE\n(inverted)', 'R²\nScore']
-    
-    # Plot radar chart
-    ax.set_theta_offset(np.pi / 2)
-    ax.set_theta_direction(-1)
-    plt.xticks(angles[:-1], labels, fontsize=14)
-    ax.set_rlabel_position(0)
-    plt.ylim(0, 1)
-    
-    for model in normalized:
-        values = normalized[model]
-        # Close the loop
-        values = np.append(values, values[0])
-        ax.plot(angles, values, 'o-', linewidth=2, label=model, 
-                color=style['colors'].get(model, '#666666'))
-        ax.fill(angles, values, alpha=0.1, 
-                color=style['colors'].get(model, '#666666'))
-    
-    plt.legend(loc='upper right', bbox_to_anchor=(0.2, 0.1), fontsize=12)
-    plt.title('Model Performance Comparison\n(Higher is Better)', y=1.1, fontsize=18)
-    
-    save_figure(fig, "model_radar_comparison", output_dir)
-    
     # 3. Generate metrics summary table
     try:
         plot_metrics_summary_table(metrics_df)
@@ -367,10 +313,11 @@ def plot_model_comparison(metrics_df=None):
         # Plot best model first (this is the default behavior)
         plot_residuals(output_dir)
         
-        # Then plot each model individually
+        # Then plot each non-sector model individually
         for model_name in residuals.keys():
-            print(f"Generating residual plot for {model_name}...")
-            plot_residuals(output_dir, best_model_name=model_name)
+            if not model_name.startswith("Sector_"):
+                print(f"Generating residual plot for {model_name}...")
+                plot_residuals(output_dir, best_model_name=model_name)
             
     except Exception as e:
         print(f"Error generating residual plots: {e}")
@@ -408,6 +355,11 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
         # Load residuals data
         residuals = io.load_model("model_residuals.pkl", settings.METRICS_DIR)
         
+        # Print available models for debugging
+        print("Available models in residuals:")
+        for model in residuals.keys():
+            print(f"  - {model}")
+            
         # Load metrics to find best model if not specified
         metrics_file = settings.METRICS_DIR / "all_models_comparison.csv"
         if metrics_file.exists():
@@ -423,6 +375,11 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
         
         # If plotting a specific model
         if best_model_name is not None and best_model_name in residuals:
+            # Skip sector-specific models
+            if best_model_name.startswith("Sector_"):
+                return
+
+            print(f"Processing residual plot for {best_model_name}")
             # Plot residuals for a single model
             model_res = residuals[best_model_name]
             
@@ -495,7 +452,11 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
             plt.suptitle(f'Residuals Analysis for {best_model_name}', fontsize=16, y=1.02)
             
             plt.tight_layout()
+
+            # Save the figure and report success
             save_figure(fig, f"{best_model_name}_residuals_analysis", output_dir)
+            print(f"Successfully saved residual plot for {best_model_name}")
+            plt.close(fig)
             
         # Create a comparative plot of residuals for top models
         fig, axes = plt.subplots(2, 2, figsize=(16, 14))
@@ -505,6 +466,14 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
             top_models = metrics_df.sort_values('RMSE').head(top_n)['model_name'].tolist()
         else:
             top_models = list(residuals.keys())[:top_n]
+            
+        # Filter top_models to only include those that exist in residuals
+        top_models = [model for model in top_models if model in residuals]
+        
+        # Skip if no models to plot
+        if not top_models:
+            print("No valid models found for comparison plot.")
+            return None
         
         # 1. Boxplot of residuals
         ax = axes[0, 0]
@@ -599,6 +568,7 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
         import traceback
         traceback.print_exc()
         return None
+
 
 def plot_statistical_tests(tests_df=None):
     """
