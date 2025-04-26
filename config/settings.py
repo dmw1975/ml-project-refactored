@@ -71,3 +71,24 @@ MODEL_COLORS = {
     'ElasticNet_LR_Yeo': '#d35400',
     'ElasticNet_LR_Yeo_Random': '#8e44ad'
 }
+
+# Add these lines to your existing config/settings.py file
+
+# XGBoost parameters
+XGBOOST_PARAMS = {
+    "random_state": 42,
+    "test_size": 0.2,
+    "n_trials": 50  # For Optuna optimization
+}
+
+# Add XGBoost colors to your existing MODEL_COLORS dictionary
+MODEL_COLORS.update({
+    'XGB_Base_basic': '#1f77b4',
+    'XGB_Base_optuna': '#ff7f0e',
+    'XGB_Yeo_basic': '#2ca02c',
+    'XGB_Yeo_optuna': '#d62728',
+    'XGB_Base_Random_basic': '#9467bd',
+    'XGB_Base_Random_optuna': '#8c564b',
+    'XGB_Yeo_Random_basic': '#e377c2',
+    'XGB_Yeo_Random_optuna': '#7f7f7f'
+})

@@ -31,6 +31,11 @@ def parse_args():
     parser.add_argument('--sector-only', action='store_true', 
                     help='Run only sector models, skipping standard models')
     parser.add_argument('--vif', action='store_true', help='Analyze multicollinearity using VIF')
+    parser.add_argument('--train-xgboost', action='store_true', help='Train XGBoost models')
+    parser.add_argument('--optimize-xgboost', type=int, metavar='N',
+                        help='Optimize XGBoost with Optuna using N trials (default: 50)')
+    parser.add_argument('--visualize-xgboost', action='store_true', help='Generate XGBoost visualizations')
+
     return parser.parse_args()
 
 def main():
@@ -51,6 +56,16 @@ def main():
             print("\nTraining linear regression models...")
             from models.linear_regression import train_all_models
             linear_models = train_all_models()
+
+        # Add XGBoost section after the standard model pipeline (FIXED INDENTATION)
+        if args.all or args.train_xgboost or args.optimize_xgboost:
+            print("\nTraining XGBoost models...")
+            from models.xgboost_model import train_xgboost_models
+            
+            # Determine number of trials
+            n_trials = args.optimize_xgboost if args.optimize_xgboost else settings.XGBOOST_PARAMS.get('n_trials', 50)
+            
+            xgboost_models = train_xgboost_models(datasets=args.datasets, n_trials=n_trials)
         
         if args.train_linear_elasticnet:
             print("\nTraining linear models with optimal ElasticNet parameters...")
@@ -92,6 +107,11 @@ def main():
             plot_top_features()
             plot_feature_importance_by_model()
             plot_feature_correlations()
+        
+        if args.all or args.visualize_xgboost:
+            print("\nGenerating XGBoost visualizations...")
+            from visualization.xgboost_plots import visualize_xgboost_models
+            visualize_xgboost_models()
 
     # VIF analysis can be run separately
     if args.all or args.vif:

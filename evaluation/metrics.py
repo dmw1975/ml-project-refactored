@@ -31,10 +31,19 @@ def load_all_models():
     except:
         print("No ElasticNet models found")
         elastic_models = {}
+
+     # Load XGBoost models (ADD THIS SECTION)
+    try:
+        xgboost_models = io.load_model("xgboost_models.pkl", settings.MODEL_DIR)
+        print(f"Loaded {len(xgboost_models)} XGBoost models")
+    except:
+        print("No XGBoost models found")
+        xgboost_models = {}
     
     # Combine all models
-    all_models = {**linear_models, **elastic_models}
+    all_models = {**linear_models, **elastic_models, **xgboost_models}
     
+       
     return all_models
 
 def calculate_residuals(all_models):
