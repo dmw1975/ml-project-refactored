@@ -16,34 +16,79 @@ from config import settings
 from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
 from utils import io
 
+from sklearn.model_selection import train_test_split
+import numpy as np
+
 def perform_stratified_split_by_sector(X, y, test_size=0.2, random_state=42):
     """
-    Performs a stratified train-test split based on GICS sectors.
+    Performs a stratified train-test split based on GICS sectors, 
+    but preserves ALL original features for model training.
+    
+    Parameters
+    ----------
+    X : pandas.DataFrame
+        Feature data with sector one-hot encoding and other KPIs.
+    y : pandas.Series
+        Target variable (e.g., ESG score).
+    test_size : float
+        Proportion of the dataset to include in the test split.
+    random_state : int
+        Random seed for reproducibility.
+        
+    Returns
+    -------
+    X_train, X_test, y_train, y_test : split data
     """
-    # Extract sector columns
-    sector_columns = [col for col in X.columns if col.startswith('gics_sector_')]
-    
-    # Create a sector label for each company (convert one-hot to single label)
-    sector_data = X[sector_columns].copy()
+    # Step 1: Identify sector columns
+    sector_columns = [col for col in X.columns if col.startswith('gics_sector_') or col.startswith('sector_')]
+
+    if len(sector_columns) == 0:
+        raise ValueError("No sector columns found in X!")
+
+    # Step 2: Create sector labels for stratification
     sector_labels = np.zeros(len(X), dtype=int)
-    
     for i, col in enumerate(sector_columns):
-        # Assign a unique integer to each sector
-        sector_labels[sector_data[col] == 1] = i
-    
-    # Get train and test indices preserving sector proportions
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=sector_labels
+        sector_labels[X[col] == 1] = i
+
+    # Step 3: Perform stratified split (only use labels for splitting guidance)
+    train_idx, test_idx = train_test_split(
+        np.arange(len(X)),
+        test_size=test_size,
+        random_state=random_state,
+        stratify=sector_labels
     )
-    
-    # Print sector distributions for verification
+
+    # Step 4: Split the FULL feature set
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+
+    # Step 5: Print sector distribution for verification
     print("Sector distribution check:")
     for i, col in enumerate(sector_columns):
         train_pct = X_train[col].mean() * 100
         test_pct = X_test[col].mean() * 100
-        print(f"{col.replace('gics_sector_', '')}: Train {train_pct:.1f}%, Test {test_pct:.1f}%")
-    
+        print(f"{col.replace('gics_sector_', '').replace('sector_', '')}: Train {train_pct:.1f}%, Test {test_pct:.1f}%")
+
     return X_train, X_test, y_train, y_test
+
+
+
+# Cleanup old results
+def cleanup_old_results():
+    model_file = settings.MODEL_DIR / "linear_regression_models.pkl"
+    metrics_file = settings.METRICS_DIR / "linear_regression_metrics.csv"
+
+    if model_file.exists():
+        print(f"Removing old model file: {model_file}")
+        model_file.unlink()
+
+    if metrics_file.exists():
+        print(f"Removing old metrics file: {metrics_file}")
+        metrics_file.unlink()
+
+# Call the cleanup
+cleanup_old_results()
+
 
 def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=0.2):
     """

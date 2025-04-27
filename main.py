@@ -93,11 +93,11 @@ def main():
             
         if args.all or args.visualize:
             print("\nGenerating visualizations...")
-            from visualization.metrics_plots import plot_model_comparison, plot_residuals, plot_statistical_tests, plot_elasticnet_cv_distribution, plot_metrics_summary_table
+            from visualization.metrics_plots import plot_model_comparison, plot_residuals, plot_statistical_tests_filtered, plot_elasticnet_cv_distribution, plot_metrics_summary_table
             print("Creating model performance visualizations...")
             plot_model_comparison()
             plot_residuals()
-            plot_statistical_tests()
+            plot_statistical_tests_filtered()
             plot_elasticnet_cv_distribution()
             plot_metrics_summary_table()
             

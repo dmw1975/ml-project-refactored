@@ -1,6 +1,6 @@
 """Visualization module for ML models and results."""
 
-from visualization.metrics_plots import plot_model_comparison, plot_residuals, plot_statistical_tests
+from visualization.metrics_plots import plot_model_comparison, plot_residuals, plot_statistical_tests_filtered
 from visualization.feature_plots import plot_top_features, plot_feature_importance_by_model, plot_feature_correlations
 from visualization.style import setup_visualization_style, save_figure
 

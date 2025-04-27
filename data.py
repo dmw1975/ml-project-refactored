@@ -63,7 +63,34 @@ def load_scores_data():
     )
 
 def get_base_and_yeo_features(feature_df):
-    """
+    base_path = Path("data/pkl/base_columns.pkl")
+    yeo_path = Path("data/pkl/yeo_columns.pkl")
+    
+    with open(base_path, 'rb') as f:
+        base_columns = pickle.load(f)
+
+    with open(yeo_path, 'rb') as f:
+        yeo_columns = pickle.load(f)
+    
+    available_base_columns = [col for col in base_columns if col in feature_df.columns]
+    available_yeo_columns = [col for col in yeo_columns if col in feature_df.columns]
+
+    # ALSO keep sector columns
+    sector_columns = [col for col in feature_df.columns if col.startswith('gics_sector_') or col.startswith('sector_')]
+
+    # Create LR_Base and LR_Yeo datasets
+    LR_Base = feature_df[available_base_columns + sector_columns].copy()
+    LR_Yeo = feature_df[available_yeo_columns + sector_columns].copy()
+
+    return LR_Base, LR_Yeo, available_base_columns, available_yeo_columns
+
+
+
+
+
+"""
+def get_base_and_yeo_features(feature_df):
+    
     Get base features and Yeo-Johnson transformed features from pre-saved pickle files.
     
     Returns:
@@ -76,7 +103,7 @@ def get_base_and_yeo_features(feature_df):
         List of column names in LR_Base
     yeo_columns : list
         List of column names in LR_Yeo
-    """
+    
     # Define the correct paths for pickle files
     base_path = Path("data/pkl/base_columns.pkl")
     yeo_path = Path("data/pkl/yeo_columns.pkl")
@@ -142,6 +169,8 @@ def get_base_and_yeo_features(feature_df):
         print(f"WARNING: {len(overlap)} overlapping columns between numerical and categorical!")
     
     return LR_Base, LR_Yeo, available_base_columns, complete_yeo_columns
+
+"""
 
 def add_random_feature(df, seed=42):
     """

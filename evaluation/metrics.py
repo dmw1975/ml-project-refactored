@@ -134,115 +134,73 @@ def create_comparison_table(all_models):
     return metrics_df
 
 def perform_statistical_tests(all_models):
-    """Perform statistical tests to compare models with Holm-Bonferroni correction."""
+    """Perform statistical tests to compare serious models with Holm-Bonferroni correction."""
     import scipy.stats as stats
     import numpy as np
-    
-    # We'll compare models using paired t-tests on squared errors
-    model_names = list(all_models.keys())
+    import pandas as pd
+
+    # Define allowed serious model types
+    allowed_model_types = ['elasticnet', 'xgb', 'catboost', 'lightgbm']
+
+    def is_allowed(name):
+        name = name.lower()
+        return any(allowed_type in name for allowed_type in allowed_model_types)
+
+    # Filter models
+    filtered_models = {name: model for name, model in all_models.items() if is_allowed(name)}
+    model_names = list(filtered_models.keys())
     n_models = len(model_names)
-    
-    # Collect all p-values and corresponding test information
+
+    print("\nFiltered serious models for statistical testing:")
+    for m in model_names:
+        print(f"  - {m}")
+
+    if n_models < 2:
+        print("Not enough serious models for statistical testing after filtering.")
+        return
+
     all_tests = []
-    
-    # Perform pairwise comparisons
+
     for i in range(n_models):
-        for j in range(i+1, n_models):
+        for j in range(i + 1, n_models):
             model_a = model_names[i]
             model_b = model_names[j]
-            
-            # Get predictions for both models
-            y_test_a = all_models[model_a]['y_test']
-            y_pred_a = all_models[model_a]['y_pred']
-            y_test_b = all_models[model_b]['y_test']
-            y_pred_b = all_models[model_b]['y_pred']
-            
-            # Convert to numpy arrays for consistent handling
-            if isinstance(y_test_a, pd.Series) or isinstance(y_test_a, pd.DataFrame):
-                y_test_a = y_test_a.values
-            if isinstance(y_pred_a, pd.Series) or isinstance(y_pred_a, pd.DataFrame):
-                y_pred_a = y_pred_a.values
-            if isinstance(y_test_b, pd.Series) or isinstance(y_test_b, pd.DataFrame):
-                y_test_b = y_test_b.values
-            if isinstance(y_pred_b, pd.Series) or isinstance(y_pred_b, pd.DataFrame):
-                y_pred_b = y_pred_b.values
-            
-            # Make sure all arrays are 1D
-            y_test_a = y_test_a.flatten()
-            y_pred_a = y_pred_a.flatten()
-            y_test_b = y_test_b.flatten()
-            y_pred_b = y_pred_b.flatten()
-            
+
+            # Extract and flatten y_test and y_pred for model_a
+            y_test_a = np.array(filtered_models[model_a]['y_test']).flatten()
+            y_pred_a = np.array(filtered_models[model_a]['y_pred']).flatten()
+
+            # Extract and flatten y_test and y_pred for model_b
+            y_test_b = np.array(filtered_models[model_b]['y_test']).flatten()
+            y_pred_b = np.array(filtered_models[model_b]['y_pred']).flatten()
+
             # Calculate squared errors
-            se_a = (y_test_a - y_pred_a)**2
-            se_b = (y_test_b - y_pred_b)**2
-            
-            # Now we need to make sure we're comparing the same test samples
-            # If models were trained on different splits, this will require realignment
+            se_a = (y_test_a - y_pred_a) ** 2
+            se_b = (y_test_b - y_pred_b) ** 2
+
             if len(se_a) != len(se_b):
-                print(f"Warning: Models {model_a} and {model_b} have different test set sizes.")
-                print(f"  {model_a}: {len(se_a)}, {model_b}: {len(se_b)}")
-                print(f"Cannot perform statistical comparison between them.")
+                print(f"Warning: Cannot compare {model_a} and {model_b} (different test set sizes)")
                 continue
-            
-            # Debug output
-            print(f"Comparing {model_a} vs {model_b}: test set size = {len(se_a)}")
-            
-            # Paired t-test on squared errors
-            try:
-                t_stat, p_value = stats.ttest_rel(se_a, se_b)
-                
-                # For non-scalar results (which should not happen with properly flattened arrays)
-                if hasattr(t_stat, 'size') and t_stat.size > 1:
-                    print(f"Warning: t_stat has size {t_stat.size}, expected scalar. Using mean.")
-                    t_stat_float = float(np.mean(t_stat))
-                    p_value_float = float(np.mean(p_value))
-                else:
-                    # Normal scalar handling
-                    t_stat_float = float(t_stat)
-                    p_value_float = float(p_value)
-                
-                # Determine which model is better
-                better_model = model_a if t_stat_float < 0 else model_b if t_stat_float > 0 else 'Equal'
-                
-                # Add to all tests
-                all_tests.append({
-                    'model_a': model_a,
-                    'model_b': model_b,
-                    't_statistic': t_stat_float,
-                    'p_value': p_value_float,
-                    'better_model': better_model
-                })
-                
-                print(f"  Result: t={t_stat_float:.4f}, p={p_value_float:.4f}")
-                
-            except Exception as e:
-                print(f"Error comparing {model_a} and {model_b}: {str(e)}")
-                # Print more debugging info
-                print(f"  Shapes: se_a={se_a.shape}, se_b={se_b.shape}")
-                print(f"  Types: se_a={type(se_a)}, se_b={type(se_b)}")
-                print(f"  Values: se_a[0]={se_a[0] if len(se_a) > 0 else 'empty'}, se_b[0]={se_b[0] if len(se_b) > 0 else 'empty'}")
-                continue
-    
-    # If we have no valid tests, return empty DataFrame
-    if not all_tests:
-        print("No valid statistical tests could be performed.")
-        return pd.DataFrame()
-    
-    # Apply Holm-Bonferroni correction
-    # Sort tests by p-value (ascending)
+
+            t_stat, p_value = stats.ttest_rel(se_a, se_b)
+
+            better_model = model_a if t_stat < 0 else model_b
+
+            all_tests.append({
+                'model_a': model_a,
+                'model_b': model_b,
+                't_statistic': float(t_stat),
+                'p_value': float(p_value),
+                'better_model': better_model
+            })
+
+    # Holm-Bonferroni correction
     all_tests = sorted(all_tests, key=lambda x: x['p_value'])
-    m = len(all_tests)  # Total number of tests
-    
-    # Store final test results
+    m = len(all_tests)
+
     test_results = []
-    
-    # Apply sequential correction
     for i, test in enumerate(all_tests):
-        # Holm-Bonferroni adjusted threshold
         adj_threshold = 0.05 / (m - i)
-        
-        # Store in test results with adjusted significance
         test_results.append({
             'model_a': test['model_a'],
             'model_b': test['model_b'],
@@ -252,28 +210,14 @@ def perform_statistical_tests(all_models):
             'significant': test['p_value'] < adj_threshold,
             'better_model': test['better_model']
         })
-    
-    # Convert to DataFrame
+
     tests_df = pd.DataFrame(test_results)
-    
-    # Save to CSV
     tests_df.to_csv(f"{settings.METRICS_DIR}/model_comparison_tests.csv", index=False)
-    
-    # Print summary of significant differences
-    print("\nSignificant Model Differences (with Holm-Bonferroni correction):")
-    print("=============================================================")
-    sig_tests = tests_df[tests_df['significant'] == True] if not tests_df.empty else tests_df
-    if not sig_tests.empty:
-        for _, row in sig_tests.iterrows():
-            better = row['better_model']
-            worse = row['model_a'] if better == row['model_b'] else row['model_b']
-            p_val = row['p_value']
-            adj_threshold = row['adjusted_threshold']
-            print(f"{better} is significantly better than {worse} (p={p_val:.4f}, threshold={adj_threshold:.4f})")
-    else:
-        print("No significant differences found between models after correction.")
-    
+
+    print("\nStatistical tests completed and saved to model_comparison_tests.csv")
     return tests_df
+
+
 
 def evaluate_models():
     """Run all evaluation steps on trained models."""

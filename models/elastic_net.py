@@ -17,8 +17,32 @@ from data import load_features_data, load_scores_data, get_base_and_yeo_features
 from utils import io
 from models.linear_regression import perform_stratified_split_by_sector
 
+import os
+
+# Cleanup old results
+def cleanup_old_results():
+    model_file = settings.MODEL_DIR / "elasticnet_models.pkl"
+    metrics_file = settings.METRICS_DIR / "elasticnet_metrics.csv"
+    params_file = settings.MODEL_DIR / "elasticnet_params.pkl"
+
+    if model_file.exists():
+        print(f"Removing old model file: {model_file}")
+        model_file.unlink()
+
+    if metrics_file.exists():
+        print(f"Removing old metrics file: {metrics_file}")
+        metrics_file.unlink()
+        
+    if params_file.exists():
+        print(f"Removing old params file: {params_file}")
+        params_file.unlink()
+
+# Call the cleanup
+cleanup_old_results()
+
 def run_elasticnet_model(X_data, y_data, model_name, alpha, l1_ratio, 
-                        random_state=42, test_size=0.2):
+                         random_state=42, test_size=0.2,
+                         cv_mse=None, cv_mse_std=None):
     """
     Run ElasticNet regression with the provided parameters.
     
@@ -72,7 +96,9 @@ def run_elasticnet_model(X_data, y_data, model_name, alpha, l1_ratio,
         'n_companies_train': len(X_train),
         'n_companies_test': len(X_test),
         'y_test': y_test,
-        'y_pred': y_pred
+        'y_pred': y_pred,
+        'cv_mse': cv_mse,             # Store if available
+        'cv_mse_std': cv_mse_std       # Store if available
     }
 
 def find_optimal_parameters(X_data, y_data, param_key,
@@ -200,10 +226,9 @@ def train_elasticnet_models(datasets=None):
     print(f"LR_Base column count: {len(LR_Base.columns)}")
     print(f"LR_Yeo column count: {len(LR_Yeo.columns)}")
     
-    # If LR_Yeo has less features, fix it directly here
+    # If LR_Yeo has fewer features, fix it
     if len(LR_Yeo.columns) < len(LR_Base.columns):
         print(f"WARNING: LR_Yeo has fewer columns than expected, forcing fix...")
-        # Identify all Yeo-transformed columns
         yeo_prefix = 'yeo_joh_'
         yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
         original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
@@ -212,7 +237,7 @@ def train_elasticnet_models(datasets=None):
         LR_Yeo = feature_df[complete_yeo_columns].copy()
         print(f"Fixed LR_Yeo column count: {len(LR_Yeo.columns)}")
     
-    # Create versions with random features
+    # Create versions with random feature
     LR_Base_random = add_random_feature(LR_Base)
     LR_Yeo_random = add_random_feature(LR_Yeo)
     
@@ -232,64 +257,71 @@ def train_elasticnet_models(datasets=None):
         selected_datasets = [d for d in all_datasets if d['name'] in datasets]
     else:
         selected_datasets = all_datasets
-    
+
     print("\n" + "="*50)
     print(f"Finding Optimal ElasticNet Parameters for {len(selected_datasets)} Datasets")
     print("="*50)
-    
-    # Dictionary to store parameters
+
     param_results = []
-    
-    # Find optimal parameters
+
+    # 🔵 First: find optimal parameters
     for config in selected_datasets:
         print(f"\nProcessing dataset: {config['name']}...")
         best_params, results_df = find_optimal_parameters(
-            config['data'], 
-            y, 
+            config['data'],
+            y,
             param_key=config['name'],
             random_state=settings.ELASTICNET_PARAMS['random_state'],
             test_size=settings.ELASTICNET_PARAMS['test_size']
         )
         
+        best_cv_mse = results_df['mean_rmse'].min()
+        best_cv_mse_std = results_df.loc[results_df['mean_rmse'].idxmin(), 'std_rmse']
+        
         param_results.append({
             'dataset': config['name'],
             'best_params': best_params,
-            'cv_results': results_df
+            'cv_results': results_df,
+            'best_cv_mse': best_cv_mse,
+            'best_cv_mse_std': best_cv_mse_std
         })
     
     # Save parameter results
     io.save_model(param_results, "elasticnet_params.pkl", settings.MODEL_DIR)
-    
+
     print("\n" + "="*50)
     print("Training ElasticNet Models with Optimal Parameters")
     print("="*50)
-    
-    # Dictionary to store model results
+
     model_results = {}
-    
-    # Train models with optimal parameters
+
+    # 🔵 Then: train models using optimal parameters
     for config, param_result in zip(selected_datasets, param_results):
         alpha, l1_ratio = param_result['best_params']
+        best_cv_mse = param_result['best_cv_mse']
+        best_cv_mse_std = param_result['best_cv_mse_std']
         
         model_name = f"ElasticNet_{config['name']}"
         print(f"\nTraining {model_name}...")
-        
+
         results = run_elasticnet_model(
-            config['data'], 
-            y, 
+            config['data'],
+            y,
             model_name=model_name,
             alpha=alpha,
             l1_ratio=l1_ratio,
             random_state=settings.ELASTICNET_PARAMS['random_state'],
-            test_size=settings.ELASTICNET_PARAMS['test_size']
+            test_size=settings.ELASTICNET_PARAMS['test_size'],
+            cv_mse=best_cv_mse,
+            cv_mse_std=best_cv_mse_std
         )
-        
+
         model_results[model_name] = results
-    
-    # Save results
+
+    # Save trained model results
     io.save_model(model_results, "elasticnet_models.pkl", settings.MODEL_DIR)
-    
-    # Save summary to CSV
+
+    # Save summary metrics
     metrics_df = pd.DataFrame([
         {
             'model_name': name,
@@ -300,14 +332,16 @@ def train_elasticnet_models(datasets=None):
             'alpha': metrics['alpha'],
             'l1_ratio': metrics['l1_ratio'],
             'n_features_used': metrics['n_features_used'],
-            'n_companies': metrics['n_companies']
+            'n_companies': metrics['n_companies'],
+            'cv_mse': metrics.get('cv_mse', None),
+            'cv_mse_std': metrics.get('cv_mse_std', None)
         }
         for name, metrics in model_results.items()
     ])
-    
+
     io.ensure_dir(settings.METRICS_DIR)
     metrics_df.to_csv(f"{settings.METRICS_DIR}/elasticnet_metrics.csv", index=False)
-    
+
     print("\nElasticNet models trained and saved successfully.")
     return model_results
 

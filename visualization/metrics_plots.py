@@ -179,14 +179,17 @@ def plot_elasticnet_best_params(cv_results, output_dir=None):
 
 def plot_model_comparison(metrics_df=None):
     """
-    Create comprehensive comparison plots of model performance metrics.
+    Create high-quality comparison plots of model performance metrics for thesis publication.
     
     Parameters:
     -----------
     metrics_df : pandas.DataFrame, optional
         DataFrame containing model metrics. If None, it will be loaded.
     """
-    # Set up style
+    import matplotlib.ticker as ticker
+    from matplotlib import rcParams
+
+    # Setup style
     style = setup_visualization_style()
     
     # Load metrics if not provided
@@ -195,144 +198,66 @@ def plot_model_comparison(metrics_df=None):
         if metrics_file.exists():
             metrics_df = pd.read_csv(metrics_file)
         else:
-            try:
-                # Try loading from evaluation
-                from evaluation.metrics import evaluate_models
-                eval_results = evaluate_models()
-                metrics_df = eval_results['metrics_df']
-            except:
-                print("No metrics data found. Please run evaluation first.")
-                return
+            print("No metrics data found. Please run evaluation first.")
+            return
     
     # Set up output directory
     output_dir = settings.VISUALIZATION_DIR / "performance"
     io.ensure_dir(output_dir)
-    
-    # 1. Create bar charts of key metrics - INCREASED FIGURE SIZE
-    fig, axes = plt.subplots(2, 2, figsize=(18, 14))
-    
-    # RMSE (lower is better)
-    ax = axes[0, 0]
-    sorted_df = metrics_df.sort_values('RMSE')
-    bars = ax.bar(sorted_df['model_name'], sorted_df['RMSE'], 
-                  color=[style['colors'].get(model, '#666666') for model in sorted_df['model_name']])
-    ax.set_title('Root Mean Squared Error (RMSE)', fontsize=16, pad=15)
-    ax.set_ylabel('RMSE (lower is better)', fontsize=12)
-    ax.set_xlabel('Model', fontsize=12)
-    ax.tick_params(axis='x', rotation=45, labelsize=10)
-    ax.grid(axis='y', alpha=0.3, linestyle='--')
-    
-    # Add value labels with more space
+
+    # Increase global font size for thesis quality
+    rcParams.update({'font.size': 14})
+
+    # Sort models by RMSE ascending
+    sorted_df = metrics_df.sort_values('RMSE', ascending=True)
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(14, 8))
+
+    # Set color palette (academic style)
+    palette = sns.color_palette("Set2", n_colors=len(sorted_df))
+
+    # Barplot
+    bars = ax.bar(sorted_df['model_name'], sorted_df['RMSE'], color=palette)
+
+    # Title and labels
+    ax.set_title('Root Mean Squared Error (RMSE) Comparison Across Models', fontsize=18, pad=20)
+    ax.set_ylabel('RMSE (lower is better)', fontsize=16)
+    ax.set_xlabel('Model', fontsize=16)
+    ax.tick_params(axis='x', rotation=45, labelsize=12)
+    ax.grid(axis='y', linestyle='--', alpha=0.5)
+
+    # Tighten Y axis to focus
+    ax.set_ylim(0, sorted_df['RMSE'].max() * 1.2)
+
+    # Format Y axis to 2 decimals
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.2f'))
+
+    # Highlight best model (lowest RMSE) with a star
+    min_rmse = sorted_df['RMSE'].min()
+    min_model = sorted_df.loc[sorted_df['RMSE'].idxmin(), 'model_name']
     for bar, model_name in zip(bars, sorted_df['model_name']):
         height = bar.get_height()
-        r2 = sorted_df.loc[sorted_df['model_name'] == model_name, 'R2'].values[0]  # Get R² value
-        count = sorted_df.loc[sorted_df['model_name'] == model_name, 'n_companies'].values[0]  # Get count
-        ax.text(bar.get_x() + bar.get_width()/2, height + 0.05,
-            f'RMSE: {safe_float(height):.4f}\nR²: {safe_float(r2):.4f}\n(n={int(count)})', 
-            ha='center', va='bottom', fontsize=9)
-    
-    # R² (higher is better)
-    ax = axes[0, 1]
-    sorted_df = metrics_df.sort_values('R2', ascending=False)
-    bars = ax.bar(sorted_df['model_name'], sorted_df['R2'], 
-                  color=[style['colors'].get(model, '#666666') for model in sorted_df['model_name']])
-    ax.set_title('R² Score', fontsize=16, pad=15)
-    ax.set_ylabel('R² (higher is better)', fontsize=12)
-    ax.set_xlabel('Model', fontsize=12)
-    ax.tick_params(axis='x', rotation=45, labelsize=10)
-    ax.grid(axis='y', alpha=0.3, linestyle='--')
-    
-    # Add value labels with more space
-    for bar in bars:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2, height + 0.01,
-                f'{height:.4f}', ha='center', va='bottom', fontsize=10)
-    
-    # MAE (lower is better)
-    ax = axes[1, 0]
-    sorted_df = metrics_df.sort_values('MAE')
-    bars = ax.bar(sorted_df['model_name'], sorted_df['MAE'], 
-                  color=[style['colors'].get(model, '#666666') for model in sorted_df['model_name']])
-    ax.set_title('Mean Absolute Error (MAE)', fontsize=16, pad=15)
-    ax.set_ylabel('MAE (lower is better)', fontsize=12)
-    ax.set_xlabel('Model', fontsize=12)
-    ax.tick_params(axis='x', rotation=45, labelsize=10)
-    ax.grid(axis='y', alpha=0.3, linestyle='--')
-    
-    # Add value labels with more space
-    for bar in bars:
-        height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2, height + 0.03,
-                f'{height:.4f}', ha='center', va='bottom', fontsize=10)
-    
-    # Model Type Comparison
-    ax = axes[1, 1]
-    model_types = metrics_df['model_type'].unique()
-    type_scores = []
-    for model_type in model_types:
-        type_df = metrics_df[metrics_df['model_type'] == model_type]
-        type_scores.append({
-            'Type': model_type,
-            'Avg RMSE': type_df['RMSE'].mean(),
-            'Avg R²': type_df['R2'].mean(),
-            'Count': len(type_df)
-        })
-    
-    type_df = pd.DataFrame(type_scores)
-    bars = ax.bar(type_df['Type'], type_df['Avg RMSE'], 
-                  color=['#3498db', '#e74c3c'])
-    ax.set_title('Average RMSE by Model Type', fontsize=16, pad=15)
-    ax.set_ylabel('Avg RMSE (lower is better)', fontsize=12)
-    ax.set_xlabel('Model Type', fontsize=12)
-    ax.grid(axis='y', alpha=0.3, linestyle='--')
-    
-    # Add value and count labels with better spacing
-    for bar, count, r2 in zip(bars, type_df['Count'], type_df['Avg R²']):
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2, height + 0.05,
-                f'RMSE: {float(height):.4f}\nR²: {float(r2):.4f}\n(n={int(count)})', 
-                ha='center', va='bottom', fontsize=10)
-    
-    # Increase spacing between subplots
-    plt.subplots_adjust(hspace=0.3, wspace=0.25)
-    plt.tight_layout(pad=2.0)
-    save_figure(fig, "model_metrics_comparison", output_dir)
-    
-    # 3. Generate metrics summary table
-    try:
-        plot_metrics_summary_table(metrics_df)
-    except NameError:
-        # If plot_metrics_summary_table is not defined yet
-        print("Note: metrics_summary_table function not available")
-    
-    # 4. Plot residuals for all models
-    try:
-        # Load residuals data
-        residuals = io.load_model("model_residuals.pkl", settings.METRICS_DIR)
-        
-        # Plot best model first (this is the default behavior)
-        plot_residuals(output_dir)
-        
-        # Then plot each non-sector model individually
-        for model_name in residuals.keys():
-            if not model_name.startswith("Sector_"):
-                print(f"Generating residual plot for {model_name}...")
-                plot_residuals(output_dir, best_model_name=model_name)
-            
-    except Exception as e:
-        print(f"Error generating residual plots: {e}")
-        # Fall back to just plotting the best model
-        plot_residuals(output_dir)
-    
-    # 5. Create statistical test visualizations
-    plot_statistical_tests()
-    
-    print(f"Model comparison plots saved to {output_dir}")
+                f'{height:.4f}', ha='center', va='bottom', fontsize=12)
+        if model_name == min_model:
+            ax.text(bar.get_x() + bar.get_width()/2, height + 0.15,
+                    '*', ha='center', va='bottom', fontsize=20, color='red')
+
+    # Legend manually outside
+    ax.legend([bars[0]], ['* denotes best performing model'], loc='upper center', bbox_to_anchor=(0.5, -0.15),
+              ncol=1, frameon=False, fontsize=12)
+
+    plt.tight_layout()
+    save_figure(fig, "thesis_model_comparison_rmse", output_dir, dpi=300, format='png')
+
+    print(f"High-quality RMSE model comparison plot saved to {output_dir}")
     return fig
+
 
 def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
     """
-    Plot residuals analysis for models.
+    Plot thesis-quality residuals analysis for models.
     
     Parameters:
     -----------
@@ -343,226 +268,104 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
     top_n : int, default=4
         Number of models to include in multi-model plot.
     """
+    from matplotlib import rcParams
+    import matplotlib.ticker as ticker
+    from scipy import stats
+
     # Set up style
     style = setup_visualization_style()
-    
-    # Set up output directory
+
     if output_dir is None:
         output_dir = settings.VISUALIZATION_DIR / "performance"
     io.ensure_dir(output_dir)
-    
+
     try:
-        # Load residuals data
+        # Load residuals
         residuals = io.load_model("model_residuals.pkl", settings.METRICS_DIR)
-        
-        # Print available models for debugging
-        print("Available models in residuals:")
+
+        print("Available models for residual plots:")
         for model in residuals.keys():
             print(f"  - {model}")
-            
-        # Load metrics to find best model if not specified
+
+        # Load metrics to find best model
         metrics_file = settings.METRICS_DIR / "all_models_comparison.csv"
         if metrics_file.exists():
             metrics_df = pd.read_csv(metrics_file)
-            
-            # If no specific model requested, use best model by RMSE
+
             if best_model_name is None:
                 best_model_name = metrics_df.sort_values('RMSE').iloc[0]['model_name']
         else:
-            # If no metrics file and no specific model, use first model
             if best_model_name is None:
                 best_model_name = list(residuals.keys())[0]
-        
-        # If plotting a specific model
-        if best_model_name is not None and best_model_name in residuals:
-            # Skip sector-specific models
-            if best_model_name.startswith("Sector_"):
-                return
 
-            print(f"Processing residual plot for {best_model_name}")
-            # Plot residuals for a single model
-            model_res = residuals[best_model_name]
-            
-            # Create figure with multiple plots
-            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-            
-            # 1. Predicted vs Actual
-            ax = axes[0, 0]
-            ax.scatter(model_res['y_pred'], model_res['y_test'], 
-                      alpha=0.6, color='#3498db')
-            
-            # Add perfect prediction line
-            min_val = min(model_res['y_pred'].min(), model_res['y_test'].min())
-            max_val = max(model_res['y_pred'].max(), model_res['y_test'].max())
-            ax.plot([min_val, max_val], [min_val, max_val], 'r--')
-            
-            ax.set_xlabel('Predicted Value')
-            ax.set_ylabel('Actual Value')
-            ax.set_title('Predicted vs Actual Values', fontsize=12)
-            ax.grid(True, alpha=0.3)
-            
-            # Add correlation value
-            corr = np.corrcoef(model_res['y_pred'], model_res['y_test'])[0, 1]
-            ax.text(0.05, 0.95, f'Correlation: {corr:.4f}', transform=ax.transAxes,
-                   fontsize=12, va='top')
-            
-            # 2. Residuals vs Predicted
-            ax = axes[0, 1]
-            ax.scatter(model_res['y_pred'], model_res['residuals'], 
-                      alpha=0.6, color='#3498db')
-            
-            # Add horizontal line at y=0
-            ax.axhline(y=0, color='r', linestyle='--')
-            
-            ax.set_xlabel('Predicted Value')
-            ax.set_ylabel('Residual')
-            ax.set_title('Residuals vs Predicted Values', fontsize=12)
-            ax.grid(True, alpha=0.3)
-            
-            # 3. Histogram of residuals
-            ax = axes[1, 0]
-            sns.histplot(model_res['residuals'], kde=True, ax=ax, color='#3498db')
-            
-            # Add vertical line at x=0
-            ax.axvline(x=0, color='r', linestyle='--')
-            
-            ax.set_xlabel('Residual')
-            ax.set_ylabel('Frequency')
-            ax.set_title('Distribution of Residuals', fontsize=12)
-            
-            # Add statistics
-            mean_res = model_res['residuals'].mean()
-            std_res = model_res['residuals'].std()
-            ax.text(0.05, 0.95, f'Mean: {mean_res:.4f}\nStd Dev: {std_res:.4f}', 
-                   transform=ax.transAxes, fontsize=12, va='top')
-            
-            # 4. Q-Q plot
-            ax = axes[1, 1]
-            from scipy import stats
-            
-            # Calculate standardized residuals
-            std_residuals = (model_res['residuals'] - mean_res) / std_res
-            
-            # Create Q-Q plot
-            stats.probplot(std_residuals, dist="norm", plot=ax)
-            ax.set_title('Normal Q-Q Plot of Standardized Residuals', fontsize=12)
-            ax.grid(True, alpha=0.3)
-            
-            # Set main title
-            plt.suptitle(f'Residuals Analysis for {best_model_name}', fontsize=16, y=1.02)
-            
-            plt.tight_layout()
+        if best_model_name not in residuals:
+            print(f"Model {best_model_name} not found in residuals.")
+            return
 
-            # Save the figure and report success
-            save_figure(fig, f"{best_model_name}_residuals_analysis", output_dir)
-            print(f"Successfully saved residual plot for {best_model_name}")
-            plt.close(fig)
-            
-        # Create a comparative plot of residuals for top models
-        fig, axes = plt.subplots(2, 2, figsize=(16, 14))
-        
-        # Get top models by RMSE (or just use the first few if metrics not available)
-        if 'metrics_df' in locals():
-            top_models = metrics_df.sort_values('RMSE').head(top_n)['model_name'].tolist()
-        else:
-            top_models = list(residuals.keys())[:top_n]
-            
-        # Filter top_models to only include those that exist in residuals
-        top_models = [model for model in top_models if model in residuals]
-        
-        # Skip if no models to plot
-        if not top_models:
-            print("No valid models found for comparison plot.")
-            return None
-        
-        # 1. Boxplot of residuals
+        # Thesis-quality settings
+        rcParams.update({'font.size': 14})
+
+        print(f"Plotting residuals for {best_model_name}")
+        model_res = residuals[best_model_name]
+
+        # Create figure
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+        # 1. Predicted vs Actual
         ax = axes[0, 0]
-        boxplot_data = [residuals[model]['residuals'] for model in top_models]
-        ax.boxplot(boxplot_data, labels=top_models, patch_artist=True,
-                  boxprops=dict(facecolor='lightblue', color='blue'),
-                  flierprops=dict(marker='o', markerfacecolor='red', markersize=3))
-        
-        ax.set_xticklabels(top_models, rotation=45, ha='right')
-        ax.set_ylabel('Residuals')
-        ax.set_title('Boxplot of Residuals by Model', fontsize=12)
-        ax.grid(axis='y', alpha=0.3)
-        
-        # 2. Violin plot of absolute residuals
+        ax.scatter(model_res['y_pred'], model_res['y_test'], alpha=0.7, color='#3498db')
+        min_val = min(model_res['y_pred'].min(), model_res['y_test'].min())
+        max_val = max(model_res['y_pred'].max(), model_res['y_test'].max())
+        ax.plot([min_val, max_val], [min_val, max_val], 'r--')
+        ax.set_xlabel('Predicted ESG Score')
+        ax.set_ylabel('Actual ESG Score')
+        ax.set_title('Predicted vs Actual Values', fontsize=16)
+        ax.grid(alpha=0.5)
+
+        corr = np.corrcoef(model_res['y_pred'], model_res['y_test'])[0, 1]
+        ax.text(0.05, 0.95, f'Correlation: {corr:.4f}', transform=ax.transAxes,
+                fontsize=12, verticalalignment='top')
+
+        # 2. Residuals vs Predicted
         ax = axes[0, 1]
-        violin_data = [residuals[model]['abs_residuals'] for model in top_models]
-        ax.violinplot(violin_data, showmeans=True, showmedians=True)
-        
-        ax.set_xticks(range(1, len(top_models) + 1))
-        ax.set_xticklabels(top_models, rotation=45, ha='right')
-        ax.set_ylabel('Absolute Residuals')
-        ax.set_title('Distribution of Absolute Residuals by Model', fontsize=12)
-        ax.grid(axis='y', alpha=0.3)
-        
-        # 3. Histograms of residuals
-        ax = axes[1, 0]
-        for i, model in enumerate(top_models):
-            sns.kdeplot(residuals[model]['residuals'], 
-                       label=model, 
-                       ax=ax,
-                       color=style['colors'].get(model, f'C{i}'))
-            
-        ax.axvline(x=0, color='black', linestyle='--')
-        ax.set_xlabel('Residuals')
-        ax.set_ylabel('Density')
-        ax.set_title('Kernel Density Estimate of Residuals by Model', fontsize=12)
-        ax.grid(True, alpha=0.3)
-        ax.legend()
-        
-        # 4. Scatter of predicted values vs residuals for top model
-        ax = axes[1, 1]
-        best_model = top_models[0]
-        ax.scatter(residuals[best_model]['y_pred'], 
-                  residuals[best_model]['residuals'],
-                  alpha=0.6, 
-                  color=style['colors'].get(best_model, 'C0'))
-        
+        ax.scatter(model_res['y_pred'], model_res['residuals'], alpha=0.7, color='#2ecc71')
         ax.axhline(y=0, color='red', linestyle='--')
-        ax.set_xlabel('Predicted Values')
-        ax.set_ylabel('Residuals')
-        ax.set_title(f'Predicted vs Residuals for Best Model ({best_model})', fontsize=12)
-        ax.grid(True, alpha=0.3)
-        
-        # Add statistics table
-        stats_table = []
-        for model in top_models:
-            res = residuals[model]['residuals']
-            stats_table.append({
-                'Model': model,
-                'Mean': res.mean(),
-                'Std Dev': res.std(),
-                'Min': res.min(),
-                'Max': res.max(),
-                'RMSE': np.sqrt((res**2).mean())
-            })
-        
-        stats_df = pd.DataFrame(stats_table)
-        table_text = []
-        for _, row in stats_df.iterrows():
-            text_row = [
-                f"{row['Model']}",
-                f"Mean: {row['Mean']:.4f}",
-                f"Std: {row['Std Dev']:.4f}",
-                f"RMSE: {row['RMSE']:.4f}"
-            ]
-            table_text.append(" | ".join(text_row))
-        
-        fig.text(0.5, 0.01, "\n".join(table_text), ha='center', fontsize=10, 
-                family='monospace', bbox=dict(facecolor='white', alpha=0.8))
-        
-        # Set main title
-        plt.suptitle('Comparison of Residuals Across Models', fontsize=16, y=1.02)
-        
-        plt.tight_layout(rect=[0, 0.05, 1, 0.98])
-        save_figure(fig, "all_models_residuals_comparison", output_dir)
-        
-        print(f"Residuals plots saved to {output_dir}")
+        ax.set_xlabel('Predicted ESG Score')
+        ax.set_ylabel('Residual')
+        ax.set_title('Residuals vs Predicted Values', fontsize=16)
+        ax.grid(alpha=0.5)
+
+        # 3. Histogram of Residuals
+        ax = axes[1, 0]
+        sns.histplot(model_res['residuals'], kde=True, ax=ax, color='#e67e22')
+        ax.axvline(x=0, color='red', linestyle='--')
+        ax.set_xlabel('Residual')
+        ax.set_ylabel('Density')
+        ax.set_title('Distribution of Residuals', fontsize=16)
+
+        mean_res = model_res['residuals'].mean()
+        std_res = model_res['residuals'].std()
+        ax.text(0.05, 0.95, f'Mean: {mean_res:.4f}\nStd: {std_res:.4f}', transform=ax.transAxes,
+                fontsize=12, verticalalignment='top')
+
+        # 4. Q-Q Plot
+        ax = axes[1, 1]
+        standardized_residuals = (model_res['residuals'] - mean_res) / std_res
+        stats.probplot(standardized_residuals, dist="norm", plot=ax)
+        ax.set_title('Normal Q-Q Plot of Standardized Residuals', fontsize=16)
+        ax.grid(alpha=0.5)
+
+        # Tight layout and supertitle
+        plt.suptitle(f'Residual Analysis for {best_model_name}', fontsize=20, y=1.02)
+        plt.tight_layout(pad=2.0)
+
+        # Save figure high-res PDF
+        save_figure(fig, f"{best_model_name}_thesis_residuals", output_dir, dpi=300, format='png')
+
+        print(f"High-quality residual plot saved to {output_dir}")
+        plt.close(fig)
         return fig
-        
+
     except Exception as e:
         print(f"Error generating residual plots: {e}")
         import traceback
@@ -570,18 +373,237 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
         return None
 
 
-def plot_statistical_tests(tests_df=None):
+
+# def plot_statistical_tests(tests_df=None):
+#     """
+#     Plot visualization of statistical comparison tests between models with Holm-Bonferroni correction.
+    
+#     Parameters:
+#     -----------
+#     tests_df : pandas.DataFrame, optional
+#         DataFrame of test results. If None, it will be loaded.
+#     """
+#     # Set up style
+#     style = setup_visualization_style()
+    
+#     # Load tests if not provided
+#     if tests_df is None:
+#         tests_file = settings.METRICS_DIR / "model_comparison_tests.csv"
+#         if tests_file.exists():
+#             tests_df = pd.read_csv(tests_file)
+#         else:
+#             print("No statistical tests data found. Please run evaluation first.")
+#             return
+    
+#     # Set up output directory
+#     output_dir = settings.VISUALIZATION_DIR / "performance"
+#     io.ensure_dir(output_dir)
+    
+#     # Create heatmap of p-values
+#     all_models = sorted(list(set(tests_df['model_a']).union(set(tests_df['model_b']))))
+#     n_models = len(all_models)
+    
+#     # Create matrix of p-values
+#     p_matrix = np.ones((n_models, n_models))
+#     # Create matrix for significant comparisons after Holm-Bonferroni
+#     sig_matrix = np.zeros((n_models, n_models), dtype=bool)
+    
+#     for _, row in tests_df.iterrows():
+#         i = all_models.index(row['model_a'])
+#         j = all_models.index(row['model_b'])
+#         p_matrix[i, j] = row['p_value']
+#         p_matrix[j, i] = row['p_value']  # Mirror for symmetry
+        
+#         # Record if comparison is significant after Holm-Bonferroni
+#         sig_matrix[i, j] = row['significant']
+#         sig_matrix[j, i] = row['significant']  # Mirror for symmetry
+    
+#     # Mark diagonal as NaN to ignore in heatmap
+#     np.fill_diagonal(p_matrix, np.nan)
+#     np.fill_diagonal(sig_matrix, False)
+    
+#     # Create enhanced heatmap figure with better size for thesis
+#     fig, ax = plt.subplots(figsize=(12, 10))
+    
+#     # Use log scale for better visualization
+#     with np.errstate(divide='ignore'):
+#         log_p = -np.log10(p_matrix)
+    
+#     # Create masked array for NaN values
+#     masked_log_p = np.ma.array(log_p, mask=np.isnan(log_p))
+    
+#     # Create custom colormap with a clear distinction for significance levels
+#     cmap = plt.cm.YlOrRd
+    
+#     # Create heatmap
+#     heatmap = ax.pcolor(masked_log_p, cmap=cmap, vmin=0, vmax=4)
+    
+#     # Set ticks and labels
+#     ax.set_xticks(np.arange(n_models) + 0.5)
+#     ax.set_yticks(np.arange(n_models) + 0.5)
+#     ax.set_xticklabels(all_models, rotation=45, ha='right', fontsize=10)
+#     ax.set_yticklabels(all_models, fontsize=10)
+    
+#     # Add colorbar
+#     cbar = plt.colorbar(heatmap)
+#     cbar.set_label('-log10(p-value)', rotation=270, labelpad=20)
+    
+#     # Add significance level markers to colorbar
+#     cbar.ax.plot([0, 1], [1.3, 1.3], 'k-', lw=2)  # p=0.05 line
+#     cbar.ax.text(0.5, 1.4, 'p=0.05', ha='center', va='bottom')
+    
+#     cbar.ax.plot([0, 1], [2, 2], 'k-', lw=2)  # p=0.01 line
+#     cbar.ax.text(0.5, 2.1, 'p=0.01', ha='center', va='bottom')
+    
+#     cbar.ax.plot([0, 1], [3, 3], 'k-', lw=2)  # p=0.001 line
+#     cbar.ax.text(0.5, 3.1, 'p=0.001', ha='center', va='bottom')
+    
+#     # Add p-values and significance indicators to cells
+#     for i in range(n_models):
+#         for j in range(n_models):
+#             if not np.isnan(p_matrix[i, j]):
+#                 p_val = safe_float(p_matrix[i, j])
+#                 if p_val < 0.001:
+#                     p_text = '< 0.001'
+#                 else:
+#                     p_text = f'{p_val:.3f}'
+                
+#                 # Add asterisks for significant results after Holm-Bonferroni correction
+#                 if sig_matrix[i, j]:
+#                     p_text = p_text + '*'  # Add asterisk for significant results
+                    
+#                 # Determine text color based on background darkness
+#                 if log_p[i, j] > 2:  # Darker cells
+#                     text_color = 'white'
+#                 else:
+#                     text_color = 'black'
+                
+#                 # Draw a box around significant comparisons
+#                 if sig_matrix[i, j]:
+#                     rect = plt.Rectangle((j, i), 1, 1, fill=False, 
+#                                         edgecolor='white', linewidth=2)
+#                     ax.add_patch(rect)
+                
+#                 ax.text(j + 0.5, i + 0.5, p_text, 
+#                         ha='center', va='center', color=text_color,
+#                         fontweight='bold' if sig_matrix[i, j] else 'normal')
+    
+#     # Add a note about significance marking
+#     fig.text(0.5, 0.01, "* indicates significance after Holm-Bonferroni correction (p < adjusted threshold)",
+#             ha='center', fontsize=10, style='italic')
+    
+#     ax.set_title('Statistical Significance of Model Differences\n(-log10 of p-values from paired t-tests)',
+#                  fontsize=14)
+#     plt.tight_layout(rect=[0, 0.03, 1, 0.97])  # Adjust layout to make room for the note
+    
+#     save_figure(fig, "model_statistical_tests_heatmap", output_dir)
+    
+#     # Create a second heatmap showing only significant results after correction
+#     fig2, ax2 = plt.subplots(figsize=(12, 10))
+    
+#     # Create a mask for non-significant comparisons
+#     sig_mask = ~sig_matrix
+#     # Also mask the diagonal
+#     np.fill_diagonal(sig_mask, True)
+    
+#     # Create masked array
+#     masked_sig_log_p = np.ma.array(log_p, mask=sig_mask)
+    
+#     # Create heatmap of only significant results
+#     sig_heatmap = ax2.pcolor(masked_sig_log_p, cmap=cmap, vmin=0, vmax=4)
+    
+#     # Set ticks and labels
+#     ax2.set_xticks(np.arange(n_models) + 0.5)
+#     ax2.set_yticks(np.arange(n_models) + 0.5)
+#     ax2.set_xticklabels(all_models, rotation=45, ha='right', fontsize=10)
+#     ax2.set_yticklabels(all_models, fontsize=10)
+    
+#     # Add colorbar
+#     cbar2 = plt.colorbar(sig_heatmap)
+#     cbar2.set_label('-log10(p-value)', rotation=270, labelpad=20)
+    
+#     # Add significance level markers to colorbar
+#     cbar2.ax.plot([0, 1], [1.3, 1.3], 'k-', lw=2)  # p=0.05 line
+#     cbar2.ax.text(0.5, 1.4, 'p=0.05', ha='center', va='bottom')
+    
+#     cbar2.ax.plot([0, 1], [2, 2], 'k-', lw=2)  # p=0.01 line
+#     cbar2.ax.text(0.5, 2.1, 'p=0.01', ha='center', va='bottom')
+    
+#     cbar2.ax.plot([0, 1], [3, 3], 'k-', lw=2)  # p=0.001 line
+#     cbar2.ax.text(0.5, 3.1, 'p=0.001', ha='center', va='bottom')
+    
+#     # Add p-values to significant cells only
+#     for i in range(n_models):
+#         for j in range(n_models):
+#             if sig_matrix[i, j]:
+#                 p_val = safe_float(p_matrix[i, j])
+#                 if p_val < 0.001:
+#                     p_text = '< 0.001'
+#                 else:
+#                     p_text = f'{p_val:.3f}'
+                
+#                 # Get the better model
+#                 better_row = tests_df[(tests_df['model_a'] == all_models[i]) & 
+#                                      (tests_df['model_b'] == all_models[j])]
+#                 if not better_row.empty:
+#                     better_model = better_row.iloc[0]['better_model']
+#                     is_i_better = better_model == all_models[i]
+#                 else:
+#                     better_row = tests_df[(tests_df['model_a'] == all_models[j]) & 
+#                                          (tests_df['model_b'] == all_models[i])]
+#                     if not better_row.empty:
+#                         better_model = better_row.iloc[0]['better_model']
+#                         is_i_better = better_model == all_models[i]
+#                     else:
+#                         is_i_better = False
+                
+#                 # Add an arrow symbol showing direction of superiority
+#                 arrow = '↑' if is_i_better else '↓'
+#                 p_text = f"{p_text} {arrow}"
+                
+#                 # Determine text color based on background darkness
+#                 if log_p[i, j] > 2:  # Darker cells
+#                     text_color = 'white'
+#                 else:
+#                     text_color = 'black'
+                
+#                 ax2.text(j + 0.5, i + 0.5, p_text, 
+#                         ha='center', va='center', color=text_color,
+#                         fontweight='bold')
+    
+#     # Add a legend for the arrows
+#     fig2.text(0.5, 0.01, "↑ indicates row model is superior to column model\n↓ indicates column model is superior to row model",
+#              ha='center', fontsize=10, style='italic')
+    
+#     ax2.set_title('Significant Model Differences After Holm-Bonferroni Correction',
+#                  fontsize=14)
+#     plt.tight_layout(rect=[0, 0.05, 1, 0.97])  # Adjust layout to make room for the legend
+    
+#     save_figure(fig2, "model_significant_differences_heatmap", output_dir)
+    
+#     # Create superiority network graph if NetworkX is available
+#     # (This part remains the same as your existing implementation)
+#     # ...rest of the function...
+    
+#     print(f"Statistical test visualizations saved to {output_dir}")
+#     return fig
+
+def plot_statistical_tests_filtered(tests_df=None, allowed_model_types=None):
     """
-    Plot visualization of statistical comparison tests between models with Holm-Bonferroni correction.
+    Plot filtered statistical comparison heatmaps by dataset, including only serious models.
     
     Parameters:
     -----------
     tests_df : pandas.DataFrame, optional
         DataFrame of test results. If None, it will be loaded.
+    allowed_model_types : list, optional
+        List of substrings that model names must contain (e.g., ['elasticnet', 'xgb', 'catboost', 'lightgbm']).
     """
-    # Set up style
-    style = setup_visualization_style()
-    
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import seaborn as sns
+    from matplotlib import rcParams
+
     # Load tests if not provided
     if tests_df is None:
         tests_file = settings.METRICS_DIR / "model_comparison_tests.csv"
@@ -590,199 +612,111 @@ def plot_statistical_tests(tests_df=None):
         else:
             print("No statistical tests data found. Please run evaluation first.")
             return
-    
+
+    # Set allowed model types
+    if allowed_model_types is None:
+        allowed_model_types = ['elasticnet', 'xgb', 'catboost', 'lightgbm']
+
     # Set up output directory
-    output_dir = settings.VISUALIZATION_DIR / "performance"
+    output_dir = settings.VISUALIZATION_DIR / "performance/statistical_tests"
     io.ensure_dir(output_dir)
-    
-    # Create heatmap of p-values
-    all_models = sorted(list(set(tests_df['model_a']).union(set(tests_df['model_b']))))
-    n_models = len(all_models)
-    
-    # Create matrix of p-values
-    p_matrix = np.ones((n_models, n_models))
-    # Create matrix for significant comparisons after Holm-Bonferroni
-    sig_matrix = np.zeros((n_models, n_models), dtype=bool)
-    
-    for _, row in tests_df.iterrows():
-        i = all_models.index(row['model_a'])
-        j = all_models.index(row['model_b'])
-        p_matrix[i, j] = row['p_value']
-        p_matrix[j, i] = row['p_value']  # Mirror for symmetry
-        
-        # Record if comparison is significant after Holm-Bonferroni
-        sig_matrix[i, j] = row['significant']
-        sig_matrix[j, i] = row['significant']  # Mirror for symmetry
-    
-    # Mark diagonal as NaN to ignore in heatmap
-    np.fill_diagonal(p_matrix, np.nan)
-    np.fill_diagonal(sig_matrix, False)
-    
-    # Create enhanced heatmap figure with better size for thesis
-    fig, ax = plt.subplots(figsize=(12, 10))
-    
-    # Use log scale for better visualization
-    with np.errstate(divide='ignore'):
-        log_p = -np.log10(p_matrix)
-    
-    # Create masked array for NaN values
-    masked_log_p = np.ma.array(log_p, mask=np.isnan(log_p))
-    
-    # Create custom colormap with a clear distinction for significance levels
-    cmap = plt.cm.YlOrRd
-    
-    # Create heatmap
-    heatmap = ax.pcolor(masked_log_p, cmap=cmap, vmin=0, vmax=4)
-    
-    # Set ticks and labels
-    ax.set_xticks(np.arange(n_models) + 0.5)
-    ax.set_yticks(np.arange(n_models) + 0.5)
-    ax.set_xticklabels(all_models, rotation=45, ha='right', fontsize=10)
-    ax.set_yticklabels(all_models, fontsize=10)
-    
-    # Add colorbar
-    cbar = plt.colorbar(heatmap)
-    cbar.set_label('-log10(p-value)', rotation=270, labelpad=20)
-    
-    # Add significance level markers to colorbar
-    cbar.ax.plot([0, 1], [1.3, 1.3], 'k-', lw=2)  # p=0.05 line
-    cbar.ax.text(0.5, 1.4, 'p=0.05', ha='center', va='bottom')
-    
-    cbar.ax.plot([0, 1], [2, 2], 'k-', lw=2)  # p=0.01 line
-    cbar.ax.text(0.5, 2.1, 'p=0.01', ha='center', va='bottom')
-    
-    cbar.ax.plot([0, 1], [3, 3], 'k-', lw=2)  # p=0.001 line
-    cbar.ax.text(0.5, 3.1, 'p=0.001', ha='center', va='bottom')
-    
-    # Add p-values and significance indicators to cells
-    for i in range(n_models):
-        for j in range(n_models):
-            if not np.isnan(p_matrix[i, j]):
-                p_val = safe_float(p_matrix[i, j])
-                if p_val < 0.001:
-                    p_text = '< 0.001'
-                else:
-                    p_text = f'{p_val:.3f}'
-                
-                # Add asterisks for significant results after Holm-Bonferroni correction
-                if sig_matrix[i, j]:
-                    p_text = p_text + '*'  # Add asterisk for significant results
-                    
-                # Determine text color based on background darkness
-                if log_p[i, j] > 2:  # Darker cells
-                    text_color = 'white'
-                else:
-                    text_color = 'black'
-                
-                # Draw a box around significant comparisons
-                if sig_matrix[i, j]:
-                    rect = plt.Rectangle((j, i), 1, 1, fill=False, 
-                                        edgecolor='white', linewidth=2)
-                    ax.add_patch(rect)
-                
-                ax.text(j + 0.5, i + 0.5, p_text, 
-                        ha='center', va='center', color=text_color,
-                        fontweight='bold' if sig_matrix[i, j] else 'normal')
-    
-    # Add a note about significance marking
-    fig.text(0.5, 0.01, "* indicates significance after Holm-Bonferroni correction (p < adjusted threshold)",
-            ha='center', fontsize=10, style='italic')
-    
-    ax.set_title('Statistical Significance of Model Differences\n(-log10 of p-values from paired t-tests)',
-                 fontsize=14)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.97])  # Adjust layout to make room for the note
-    
-    save_figure(fig, "model_statistical_tests_heatmap", output_dir)
-    
-    # Create a second heatmap showing only significant results after correction
-    fig2, ax2 = plt.subplots(figsize=(12, 10))
-    
-    # Create a mask for non-significant comparisons
-    sig_mask = ~sig_matrix
-    # Also mask the diagonal
-    np.fill_diagonal(sig_mask, True)
-    
-    # Create masked array
-    masked_sig_log_p = np.ma.array(log_p, mask=sig_mask)
-    
-    # Create heatmap of only significant results
-    sig_heatmap = ax2.pcolor(masked_sig_log_p, cmap=cmap, vmin=0, vmax=4)
-    
-    # Set ticks and labels
-    ax2.set_xticks(np.arange(n_models) + 0.5)
-    ax2.set_yticks(np.arange(n_models) + 0.5)
-    ax2.set_xticklabels(all_models, rotation=45, ha='right', fontsize=10)
-    ax2.set_yticklabels(all_models, fontsize=10)
-    
-    # Add colorbar
-    cbar2 = plt.colorbar(sig_heatmap)
-    cbar2.set_label('-log10(p-value)', rotation=270, labelpad=20)
-    
-    # Add significance level markers to colorbar
-    cbar2.ax.plot([0, 1], [1.3, 1.3], 'k-', lw=2)  # p=0.05 line
-    cbar2.ax.text(0.5, 1.4, 'p=0.05', ha='center', va='bottom')
-    
-    cbar2.ax.plot([0, 1], [2, 2], 'k-', lw=2)  # p=0.01 line
-    cbar2.ax.text(0.5, 2.1, 'p=0.01', ha='center', va='bottom')
-    
-    cbar2.ax.plot([0, 1], [3, 3], 'k-', lw=2)  # p=0.001 line
-    cbar2.ax.text(0.5, 3.1, 'p=0.001', ha='center', va='bottom')
-    
-    # Add p-values to significant cells only
-    for i in range(n_models):
-        for j in range(n_models):
-            if sig_matrix[i, j]:
-                p_val = safe_float(p_matrix[i, j])
-                if p_val < 0.001:
-                    p_text = '< 0.001'
-                else:
-                    p_text = f'{p_val:.3f}'
-                
-                # Get the better model
-                better_row = tests_df[(tests_df['model_a'] == all_models[i]) & 
-                                     (tests_df['model_b'] == all_models[j])]
-                if not better_row.empty:
-                    better_model = better_row.iloc[0]['better_model']
-                    is_i_better = better_model == all_models[i]
-                else:
-                    better_row = tests_df[(tests_df['model_a'] == all_models[j]) & 
-                                         (tests_df['model_b'] == all_models[i])]
-                    if not better_row.empty:
-                        better_model = better_row.iloc[0]['better_model']
-                        is_i_better = better_model == all_models[i]
-                    else:
-                        is_i_better = False
-                
-                # Add an arrow symbol showing direction of superiority
-                arrow = '↑' if is_i_better else '↓'
-                p_text = f"{p_text} {arrow}"
-                
-                # Determine text color based on background darkness
-                if log_p[i, j] > 2:  # Darker cells
-                    text_color = 'white'
-                else:
-                    text_color = 'black'
-                
-                ax2.text(j + 0.5, i + 0.5, p_text, 
-                        ha='center', va='center', color=text_color,
-                        fontweight='bold')
-    
-    # Add a legend for the arrows
-    fig2.text(0.5, 0.01, "↑ indicates row model is superior to column model\n↓ indicates column model is superior to row model",
-             ha='center', fontsize=10, style='italic')
-    
-    ax2.set_title('Significant Model Differences After Holm-Bonferroni Correction',
-                 fontsize=14)
-    plt.tight_layout(rect=[0, 0.05, 1, 0.97])  # Adjust layout to make room for the legend
-    
-    save_figure(fig2, "model_significant_differences_heatmap", output_dir)
-    
-    # Create superiority network graph if NetworkX is available
-    # (This part remains the same as your existing implementation)
-    # ...rest of the function...
-    
-    print(f"Statistical test visualizations saved to {output_dir}")
-    return fig
+
+    # Setup visualization style
+    style = setup_visualization_style()
+    rcParams.update({'font.size': 14})
+
+    # Filter models based on allowed types (case-insensitive)
+    def is_allowed(name):
+        name = name.lower()
+        return any(allowed_type in name for allowed_type in allowed_model_types)
+
+    models = sorted(list(set(tests_df['model_a']).union(set(tests_df['model_b']))))
+    allowed_models = [m for m in models if is_allowed(m)]
+
+    print(f"Filtered models for significance testing:")
+    for m in allowed_models:
+        print(f"  - {m}")
+
+    # Group models by dataset
+    datasets = set()
+    for model_name in allowed_models:
+        if 'LR_Base' in model_name:
+            datasets.add('LR_Base')
+        elif 'LR_Yeo' in model_name:
+            datasets.add('LR_Yeo')
+        elif 'LR_Base_Random' in model_name:
+            datasets.add('LR_Base_Random')
+        elif 'LR_Yeo_Random' in model_name:
+            datasets.add('LR_Yeo_Random')
+
+    # Now create a separate heatmap per dataset
+    for dataset in datasets:
+        dataset_models = [m for m in allowed_models if dataset in m]
+
+        if len(dataset_models) < 2:
+            print(f"Skipping {dataset} — not enough models after filtering.")
+            continue
+
+        print(f"\nCreating heatmap for dataset group: {dataset}")
+
+        n_models = len(dataset_models)
+        p_matrix = np.ones((n_models, n_models))
+        sig_matrix = np.zeros((n_models, n_models), dtype=bool)
+
+        for _, row in tests_df.iterrows():
+            if row['model_a'] in dataset_models and row['model_b'] in dataset_models:
+                i = dataset_models.index(row['model_a'])
+                j = dataset_models.index(row['model_b'])
+                p_matrix[i, j] = row['p_value']
+                p_matrix[j, i] = row['p_value']
+                sig_matrix[i, j] = row['significant']
+                sig_matrix[j, i] = row['significant']
+
+        np.fill_diagonal(p_matrix, np.nan)
+
+        fig, ax = plt.subplots(figsize=(12, 10))
+        with np.errstate(divide='ignore'):
+            log_p = -np.log10(p_matrix)
+        masked_log_p = np.ma.array(log_p, mask=np.isnan(log_p))
+
+        cmap = plt.cm.YlOrRd
+        heatmap = ax.pcolor(masked_log_p, cmap=cmap, vmin=0, vmax=4)
+
+        ax.set_xticks(np.arange(n_models) + 0.5)
+        ax.set_yticks(np.arange(n_models) + 0.5)
+        ax.set_xticklabels(dataset_models, rotation=45, ha='right', fontsize=10)
+        ax.set_yticklabels(dataset_models, fontsize=10)
+
+        cbar = plt.colorbar(heatmap)
+        cbar.set_label('-log10(p-value)', rotation=270, labelpad=20)
+
+        # Annotate p-values
+        for i in range(n_models):
+            for j in range(n_models):
+                if not np.isnan(p_matrix[i, j]):
+                    p_val = p_matrix[i, j]
+                    p_text = "< 0.001" if p_val < 0.001 else f"{p_val:.3f}"
+
+                    text_color = 'white' if log_p[i, j] > 2 else 'black'
+
+                    if sig_matrix[i, j]:
+                        p_text = p_text + '*'
+
+                    ax.text(j + 0.5, i + 0.5, p_text, ha='center', va='center', color=text_color, fontweight='bold')
+
+        ax.set_title(f'Statistical Significance - {dataset}', fontsize=16, pad=20)
+        plt.tight_layout()
+
+        filename = f"model_significant_heatmap_{dataset}"
+        save_figure(fig, filename, output_dir, dpi=300, format='png')
+
+        print(f"Saved heatmap: {filename}.png")
+
+        plt.close(fig)
+
+    print("\nAll statistical heatmaps saved successfully.")
+
+
 
 
 def plot_metrics_summary_table(metrics_df=None):
@@ -910,6 +844,6 @@ if __name__ == "__main__":
     # Run all visualizations
     plot_model_comparison()
     plot_residuals()
-    plot_statistical_tests()
+    plot_statistical_tests_filtered()
     plot_elasticnet_cv_distribution()
     plot_metrics_summary_table()

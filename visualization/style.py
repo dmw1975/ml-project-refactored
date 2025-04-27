@@ -30,9 +30,23 @@ def create_blue_gradient_cmap():
     colors = ["#f7fbff", "#08306b"]  # From light blue to dark blue
     return LinearSegmentedColormap.from_list("blue_gradient", colors)
 
-def save_figure(fig, filename, directory):
-    """Save a figure with standard settings."""
-    path = f"{directory}/{filename}.{settings.FIGURE_FORMAT}"
-    fig.savefig(path, dpi=settings.FIGURE_DPI, bbox_inches='tight')
-    plt.close(fig)
-    return path
+def save_figure(fig, filename, output_dir, dpi=300, format='png'):
+    """
+    Save matplotlib figure to specified output directory.
+
+    Parameters:
+    -----------
+    fig : matplotlib.figure.Figure
+        The figure to save.
+    filename : str
+        Name of the file without extension.
+    output_dir : Path
+        Directory to save the figure.
+    dpi : int, optional
+        Dots per inch (resolution) for the saved figure. Default is 300.
+    format : str, optional
+        Format to save ('png', 'pdf', 'svg', etc.). Default is 'png'.
+    """
+    path = output_dir / f"{filename}.{format}"
+    fig.savefig(path, dpi=dpi, format=format, bbox_inches='tight')
+    print(f"Figure saved to {path}")

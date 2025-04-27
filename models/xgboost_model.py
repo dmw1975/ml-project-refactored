@@ -18,9 +18,44 @@ from data import load_features_data, load_scores_data, get_base_and_yeo_features
 from utils import io
 from models.linear_regression import perform_stratified_split_by_sector
 
+import os
+
+# Cleanup old results
+def cleanup_old_results():
+    model_file = settings.MODEL_DIR / "xgboost_models.pkl"
+    metrics_file = settings.METRICS_DIR / "xgboost_metrics.csv"
+
+    # Remove old model file if exists
+    if model_file.exists():
+        print(f"Removing old model file: {model_file}")
+        model_file.unlink()
+
+    # Remove old metrics file if exists
+    if metrics_file.exists():
+        print(f"Removing old metrics file: {metrics_file}")
+        metrics_file.unlink()
+
+# Call the cleanup
+cleanup_old_results()
+
+
 def train_basic_xgb(X, y, dataset_name):
-    """Train a basic XGBoost model with default parameters."""
+    """Train a basic XGBoost model with default parameters, ensuring sector columns exist."""
     print(f"\n--- Training Basic XGBoost on {dataset_name} ---")
+
+    # 🔵 Check and ensure sector columns exist
+    sector_cols = [col for col in X.columns if col.startswith('gics_sector_')]
+    if not sector_cols:
+        print("Warning: No sector columns found in X, adding them from full feature data...")
+        full_features = load_features_data()
+        sector_cols = [col for col in full_features.columns if col.startswith('gics_sector_')]
+
+        for col in sector_cols:
+            if col not in X.columns:
+                X[col] = full_features[col]
+        print(f"Added {len(sector_cols)} sector columns back to dataset.")
+
+    # Now safe to stratify
     X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
         X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2), 
         random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
@@ -36,14 +71,12 @@ def train_basic_xgb(X, y, dataset_name):
     r2 = r2_score(y_test, y_pred)
     rmse = np.sqrt(mse)
     
-    # Print results
     print(f"Model: {dataset_name}")
     print(f"  RMSE: {rmse:.4f}")
     print(f"  MAE : {mae:.4f}")
     print(f"  MSE : {mse:.4f}")
     print(f"  R²  : {r2:.4f}")
     
-    # Return results in standard format
     return {
         'model_name': dataset_name,
         'model': model,
@@ -60,8 +93,9 @@ def train_basic_xgb(X, y, dataset_name):
         'model_type': 'XGBoost Basic'
     }
 
+
 def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
-    """Optimize XGBoost hyperparameters using Optuna."""
+    """Optimize XGBoost hyperparameters using Optuna, reporting mean and std of CV scores."""
     print(f"\n--- Optimizing XGBoost on {dataset_name} with Optuna ---")
     
     def objective(trial):
@@ -91,33 +125,42 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
             y_pred = model.predict(X_val)
             mse = mean_squared_error(y_val, y_pred)
             cv_scores.append(mse)
-            
-        return np.mean(cv_scores)
+        
+        mean_cv_mse = np.mean(cv_scores)
+        std_cv_mse = np.std(cv_scores)
+        
+        # Save extra info into trial attributes
+        trial.set_user_attr("mean_cv_mse", mean_cv_mse)
+        trial.set_user_attr("std_cv_mse", std_cv_mse)
+        
+        return mean_cv_mse
     
     # Create a study object and optimize
     study = optuna.create_study(direction='minimize')
     study.optimize(objective, n_trials=n_trials)
     
-    # Get the best parameters and score
+    # Get the best parameters and CV results
     best_params = study.best_params
-    best_score = study.best_value
+    best_trial = study.best_trial
+    mean_cv_mse = best_trial.user_attrs["mean_cv_mse"]
+    std_cv_mse = best_trial.user_attrs["std_cv_mse"]
     
     print(f"\nBest Params for {dataset_name}:")
     for param, value in best_params.items():
         print(f"  {param}: {value}")
-    print(f"Best CV MSE: {best_score:.4f}")
+    print(f"Best CV MSE: {mean_cv_mse:.4f} ± {std_cv_mse:.4f}")
     
     # Train final model with best parameters
     X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
         X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2),
         random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
     )
-    
+
     best_model = XGBRegressor(**best_params)
     best_model.fit(X_train, y_train)
     y_pred = best_model.predict(X_test)
     
-    # Calculate metrics
+    # Calculate test metrics
     mse = mean_squared_error(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
@@ -138,7 +181,8 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
         'MSE': mse,
         'R2': r2,
         'best_params': best_params,
-        'cv_mse': best_score,
+        'cv_mse': mean_cv_mse,
+        'cv_mse_std': std_cv_mse,
         'n_companies': len(X),
         'n_companies_train': len(X_train),
         'n_companies_test': len(X_test),
@@ -146,19 +190,13 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
         'y_pred': y_pred,
         'n_features': X.shape[1],
         'model_type': 'XGBoost Optuna',
-        'study': study  # Include the study object for visualization
+        'study': study  # Include study object for potential further analysis
     }
+
 
 def train_xgboost_models(datasets=None, n_trials=50):
     """
     Train and optimize XGBoost models for all datasets.
-    
-    Parameters:
-    -----------
-    datasets : list, optional
-        List of dataset names to process. If None, all datasets are processed.
-    n_trials : int, default=50
-        Number of Optuna trials for optimization
     """
     print("Loading data...")
     feature_df = load_features_data()
@@ -167,9 +205,20 @@ def train_xgboost_models(datasets=None, n_trials=50):
     # Get feature sets
     LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
     
-    # Create versions with random features
+    # Find sector columns
+    sector_columns = [col for col in feature_df.columns if col.startswith('gics_sector_')]
+    print(f"Sector columns found: {sector_columns}")
+
+    # Add random features
     LR_Base_random = add_random_feature(LR_Base)
     LR_Yeo_random = add_random_feature(LR_Yeo)
+    
+    # 🔵 Ensure random datasets also contain sector columns
+    for sector_col in sector_columns:
+        if sector_col not in LR_Base_random.columns:
+            LR_Base_random[sector_col] = feature_df[sector_col]
+        if sector_col not in LR_Yeo_random.columns:
+            LR_Yeo_random[sector_col] = feature_df[sector_col]
     
     # Target variable
     y = score_df
@@ -192,17 +241,13 @@ def train_xgboost_models(datasets=None, n_trials=50):
     print(f"Training XGBoost Models for {len(selected_datasets)} Datasets")
     print("="*50)
     
-    # Dictionary to store all results
     model_results = {}
     
-    # Train basic models and optimized models
     for config in selected_datasets:
-        # Basic model
         basic_name = f"{config['name']}_basic"
         basic_results = train_basic_xgb(config['data'], y, basic_name)
         model_results[basic_name] = basic_results
         
-        # Optuna optimized model
         optuna_name = f"{config['name']}_optuna"
         optuna_results = optimize_xgb_with_optuna(config['data'], y, optuna_name, n_trials=n_trials)
         model_results[optuna_name] = optuna_results
@@ -218,18 +263,23 @@ def train_xgboost_models(datasets=None, n_trials=50):
             'MAE': metrics['MAE'],
             'MSE': metrics['MSE'],
             'R2': metrics['R2'],
+            'cv_mse': metrics.get('cv_mse', np.nan),
+            'cv_mse_std': metrics.get('cv_mse_std', np.nan),
             'n_companies': metrics['n_companies'],
             'n_features': metrics['n_features'],
             'model_type': metrics['model_type']
         }
         for name, metrics in model_results.items()
     ])
-    
+
     io.ensure_dir(settings.METRICS_DIR)
     metrics_df.to_csv(f"{settings.METRICS_DIR}/xgboost_metrics.csv", index=False)
     
     print("\nXGBoost models trained and saved successfully.")
     return model_results
+
+    
+
 
 if __name__ == "__main__":
     # Run this file directly to train all models
