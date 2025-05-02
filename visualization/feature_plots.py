@@ -1,4 +1,16 @@
-"""Visualization functions for feature importance and analysis."""
+"""Visualization functions for feature importance and analysis (DEPRECATED).
+
+This module is deprecated and will be removed in a future version.
+Please use visualization_new package instead.
+"""
+
+import warnings
+
+warnings.warn(
+    "This module is deprecated. Please use visualization_new.plots.features instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import numpy as np
 import pandas as pd

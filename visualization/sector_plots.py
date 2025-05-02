@@ -1,4 +1,16 @@
-"""Visualization functions for sector-specific model analysis."""
+"""Visualization functions for sector-specific model analysis (DEPRECATED).
+
+This module is deprecated and will be removed in a future version.
+Please use visualization_new package instead.
+"""
+
+import warnings
+
+warnings.warn(
+    "This module is deprecated. Please use visualization_new package instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import numpy as np
 import pandas as pd
@@ -13,7 +25,7 @@ sys.path.append(str(project_root))
 
 from config import settings
 from visualization.style import setup_visualization_style, save_figure
-from visualization.metrics_plots import plot_residuals, plot_model_comparison, plot_statistical_tests
+from visualization.metrics_plots import plot_residuals, plot_model_comparison, plot_statistical_tests_filtered
 from visualization.feature_plots import plot_top_features, plot_feature_importance_by_model
 from utils import io
 

@@ -1,4 +1,16 @@
-"""Common styling for visualizations."""
+"""Common styling for visualizations (DEPRECATED).
+
+This module is deprecated and will be removed in a future version.
+Please use visualization_new.core.style instead.
+"""
+
+import warnings
+
+warnings.warn(
+    "This module is deprecated. Please use visualization_new.core.style instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import matplotlib.pyplot as plt
 import seaborn as sns

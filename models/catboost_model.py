@@ -1,8 +1,8 @@
-"""XGBoost models for ESG score prediction with Optuna optimization."""
+"""CatBoost models for ESG score prediction with Optuna optimization."""
 
 import numpy as np
 import pandas as pd
-from xgboost import XGBRegressor
+from catboost import CatBoostRegressor, Pool
 from sklearn.model_selection import train_test_split, KFold
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import optuna
@@ -22,8 +22,8 @@ import os
 
 # Cleanup old results
 def cleanup_old_results():
-    model_file = settings.MODEL_DIR / "xgboost_models.pkl"
-    metrics_file = settings.METRICS_DIR / "xgboost_metrics.csv"
+    model_file = settings.MODEL_DIR / "catboost_models.pkl"
+    metrics_file = settings.METRICS_DIR / "catboost_metrics.csv"
 
     # Remove old model file if exists
     if model_file.exists():
@@ -39,11 +39,11 @@ def cleanup_old_results():
 cleanup_old_results()
 
 
-def train_basic_xgb(X, y, dataset_name):
-    """Train a basic XGBoost model with default parameters, ensuring sector columns exist."""
-    print(f"\n--- Training Basic XGBoost on {dataset_name} ---")
+def train_basic_catboost(X, y, dataset_name):
+    """Train a basic CatBoost model with default parameters, ensuring sector columns exist."""
+    print(f"\n--- Training Basic CatBoost on {dataset_name} ---")
 
-    # 🔵 Check and ensure sector columns exist
+    # Check and ensure sector columns exist
     sector_cols = [col for col in X.columns if col.startswith('gics_sector_')]
     if not sector_cols:
         print("Warning: No sector columns found in X, adding them from full feature data...")
@@ -57,12 +57,31 @@ def train_basic_xgb(X, y, dataset_name):
 
     # Now safe to stratify
     X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
-        X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2), 
-        random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
+        X, y, test_size=settings.CATBOOST_PARAMS.get('test_size', 0.2), 
+        random_state=settings.CATBOOST_PARAMS.get('random_state', 42)
     )
     
-    model = XGBRegressor(random_state=settings.XGBOOST_PARAMS.get('random_state', 42))
-    model.fit(X_train, y_train)
+    # Mark categorical features (in case there are any)
+    cat_features = []
+    for col in X_train.columns:
+        if X_train[col].dtype == 'object' or X_train[col].dtype.name == 'category':
+            cat_features.append(col)
+    
+    # Create CatBoost model with default parameters
+    model = CatBoostRegressor(
+        loss_function='RMSE',
+        random_seed=settings.CATBOOST_PARAMS.get('random_state', 42),
+        verbose=False  # Set to False to reduce output
+    )
+    
+    # Train the model
+    model.fit(
+        X_train, y_train,
+        cat_features=cat_features if cat_features else None,
+        verbose=False
+    )
+    
+    # Make predictions
     y_pred = model.predict(X_test)
     
     # Calculate metrics
@@ -90,38 +109,57 @@ def train_basic_xgb(X, y, dataset_name):
         'y_test': y_test,
         'y_pred': y_pred,
         'n_features': X.shape[1],
-        'model_type': 'XGBoost Basic'
+        'feature_names': X.columns.tolist(),
+        'X_test': X_test,  # Store test data for importance calculation
+        'model_type': 'CatBoost Basic'
     }
 
 
-def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
-    """Optimize XGBoost hyperparameters using Optuna, reporting mean and std of CV scores."""
-    print(f"\n--- Optimizing XGBoost on {dataset_name} with Optuna ---")
+def optimize_catboost_with_optuna(X, y, dataset_name, n_trials=50):
+    """Optimize CatBoost hyperparameters using Optuna, reporting mean and std of CV scores."""
+    print(f"\n--- Optimizing CatBoost on {dataset_name} with Optuna ---")
     
+    # Identify categorical features (if any)
+    cat_features = []
+    for col in X.columns:
+        if X[col].dtype == 'object' or X[col].dtype.name == 'category':
+            cat_features.append(col)
+    
+    # Define optimization objective
     def objective(trial):
+        # Define hyperparameters to optimize
         params = {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 1000, step=100),
-            'max_depth': trial.suggest_int('max_depth', 3, 10),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-            'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-            'gamma': trial.suggest_float('gamma', 1e-8, 1.0, log=True),
-            'subsample': trial.suggest_float('subsample', 0.5, 1.0),
-            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
-            'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
-            'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
-            'random_state': settings.XGBOOST_PARAMS.get('random_state', 42)
+            'depth': trial.suggest_int('depth', 4, 10),
+            'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1e-8, 10.0, log=True),
+            'bagging_temperature': trial.suggest_float('bagging_temperature', 0, 10),
+            'random_strength': trial.suggest_float('random_strength', 1e-8, 10, log=True),
+            'border_count': trial.suggest_int('border_count', 32, 255),
+            'iterations': trial.suggest_int('iterations', 100, 1000),
+            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 50),
+            'loss_function': 'RMSE',
+            'random_seed': settings.CATBOOST_PARAMS.get('random_state', 42),
+            'verbose': False
         }
         
         # Use 5-fold cross-validation
         cv_scores = []
-        kf = KFold(n_splits=5, shuffle=True, random_state=settings.XGBOOST_PARAMS.get('random_state', 42))
+        kf = KFold(n_splits=5, shuffle=True, random_state=settings.CATBOOST_PARAMS.get('random_state', 42))
         
         for train_idx, val_idx in kf.split(X):
             X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
             y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
             
-            model = XGBRegressor(**params)
-            model.fit(X_train, y_train)
+            # Create and train model
+            model = CatBoostRegressor(**params)
+            model.fit(
+                X_train, y_train,
+                cat_features=cat_features if cat_features else None,
+                eval_set=[(X_val, y_val)],
+                verbose=False
+            )
+            
+            # Predict and evaluate
             y_pred = model.predict(X_val)
             mse = mean_squared_error(y_val, y_pred)
             cv_scores.append(mse)
@@ -145,6 +183,11 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
     mean_cv_mse = best_trial.user_attrs["mean_cv_mse"]
     std_cv_mse = best_trial.user_attrs["std_cv_mse"]
     
+    # Add default parameters that weren't optimized
+    best_params['loss_function'] = 'RMSE'
+    best_params['random_seed'] = settings.CATBOOST_PARAMS.get('random_state', 42)
+    best_params['verbose'] = False
+    
     print(f"\nBest Params for {dataset_name}:")
     for param, value in best_params.items():
         print(f"  {param}: {value}")
@@ -152,12 +195,19 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
     
     # Train final model with best parameters
     X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
-        X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2),
-        random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
+        X, y, test_size=settings.CATBOOST_PARAMS.get('test_size', 0.2),
+        random_state=settings.CATBOOST_PARAMS.get('random_state', 42)
     )
 
-    best_model = XGBRegressor(**best_params)
-    best_model.fit(X_train, y_train)
+    # Create and train best model
+    best_model = CatBoostRegressor(**best_params)
+    best_model.fit(
+        X_train, y_train,
+        cat_features=cat_features if cat_features else None,
+        verbose=False
+    )
+    
+    # Predict and evaluate
     y_pred = best_model.predict(X_test)
     
     # Calculate test metrics
@@ -189,14 +239,16 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
         'y_test': y_test,
         'y_pred': y_pred,
         'n_features': X.shape[1],
-        'model_type': 'XGBoost Optuna',
+        'feature_names': X.columns.tolist(),
+        'X_test': X_test,  # Store test data for importance calculation
+        'model_type': 'CatBoost Optuna',
         'study': study  # Include study object for potential further analysis
     }
 
 
-def train_xgboost_models(datasets=None, n_trials=50):
+def train_catboost_models(datasets=None, n_trials=settings.CATBOOST_PARAMS.get('n_trials', 50)):
     """
-    Train and optimize XGBoost models for all datasets.
+    Train and optimize CatBoost models for all datasets.
     """
     print("Loading data...")
     feature_df = load_features_data()
@@ -247,7 +299,7 @@ def train_xgboost_models(datasets=None, n_trials=50):
     LR_Base_random = add_random_feature(LR_Base)
     LR_Yeo_random = add_random_feature(LR_Yeo)
     
-    # 🔵 Ensure random datasets also contain sector columns
+    # Ensure random datasets also contain sector columns
     for sector_col in sector_columns:
         if sector_col not in LR_Base_random.columns:
             LR_Base_random[sector_col] = feature_df[sector_col]
@@ -259,10 +311,10 @@ def train_xgboost_models(datasets=None, n_trials=50):
     
     # Define all available datasets
     all_datasets = [
-        {'data': LR_Base, 'name': 'XGB_Base'},
-        {'data': LR_Yeo, 'name': 'XGB_Yeo'},
-        {'data': LR_Base_random, 'name': 'XGB_Base_Random'},
-        {'data': LR_Yeo_random, 'name': 'XGB_Yeo_Random'}
+        {'data': LR_Base, 'name': 'CatBoost_Base'},
+        {'data': LR_Yeo, 'name': 'CatBoost_Yeo'},
+        {'data': LR_Base_random, 'name': 'CatBoost_Base_Random'},
+        {'data': LR_Yeo_random, 'name': 'CatBoost_Yeo_Random'}
     ]
     
     # Filter datasets if specified
@@ -272,22 +324,22 @@ def train_xgboost_models(datasets=None, n_trials=50):
         selected_datasets = all_datasets
     
     print("\n" + "="*50)
-    print(f"Training XGBoost Models for {len(selected_datasets)} Datasets")
+    print(f"Training CatBoost Models for {len(selected_datasets)} Datasets")
     print("="*50)
     
     model_results = {}
     
     for config in selected_datasets:
         basic_name = f"{config['name']}_basic"
-        basic_results = train_basic_xgb(config['data'], y, basic_name)
+        basic_results = train_basic_catboost(config['data'], y, basic_name)
         model_results[basic_name] = basic_results
         
         optuna_name = f"{config['name']}_optuna"
-        optuna_results = optimize_xgb_with_optuna(config['data'], y, optuna_name, n_trials=n_trials)
+        optuna_results = optimize_catboost_with_optuna(config['data'], y, optuna_name, n_trials=n_trials)
         model_results[optuna_name] = optuna_results
     
     # Save results
-    io.save_model(model_results, "xgboost_models.pkl", settings.MODEL_DIR)
+    io.save_model(model_results, "catboost_models.pkl", settings.MODEL_DIR)
     
     # Save summary to CSV
     metrics_df = pd.DataFrame([
@@ -307,14 +359,12 @@ def train_xgboost_models(datasets=None, n_trials=50):
     ])
 
     io.ensure_dir(settings.METRICS_DIR)
-    metrics_df.to_csv(f"{settings.METRICS_DIR}/xgboost_metrics.csv", index=False)
+    metrics_df.to_csv(f"{settings.METRICS_DIR}/catboost_metrics.csv", index=False)
     
-    print("\nXGBoost models trained and saved successfully.")
+    print("\nCatBoost models trained and saved successfully.")
     return model_results
-
-    
 
 
 if __name__ == "__main__":
     # Run this file directly to train all models
-    train_xgboost_models()
+    train_catboost_models()

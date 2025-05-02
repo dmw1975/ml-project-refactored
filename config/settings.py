@@ -92,3 +92,41 @@ MODEL_COLORS.update({
     'XGB_Yeo_Random_basic': '#e377c2',
     'XGB_Yeo_Random_optuna': '#7f7f7f'
 })
+
+# LightGBM parameters
+LIGHTGBM_PARAMS = {
+    "random_state": 42,
+    "test_size": 0.2,
+    "n_trials": 50  # For Optuna optimization
+}
+
+# Add LightGBM colors to MODEL_COLORS dictionary
+MODEL_COLORS.update({
+    'LightGBM_Base_basic': '#17becf',
+    'LightGBM_Base_optuna': '#bcbd22',
+    'LightGBM_Yeo_basic': '#7f7f7f',
+    'LightGBM_Yeo_optuna': '#9467bd',
+    'LightGBM_Base_Random_basic': '#8c564b',
+    'LightGBM_Base_Random_optuna': '#e377c2',
+    'LightGBM_Yeo_Random_basic': '#1f77b4',
+    'LightGBM_Yeo_Random_optuna': '#ff7f0e'
+})
+
+# CatBoost parameters
+CATBOOST_PARAMS = {
+    "random_state": 42,
+    "test_size": 0.2,
+    "n_trials": 50  # For Optuna optimization
+}
+
+# Add CatBoost colors to MODEL_COLORS dictionary
+MODEL_COLORS.update({
+    'CatBoost_Base_basic': '#6a3d9a',
+    'CatBoost_Base_optuna': '#cab2d6',
+    'CatBoost_Yeo_basic': '#fb9a99',
+    'CatBoost_Yeo_optuna': '#e31a1c',
+    'CatBoost_Base_Random_basic': '#33a02c',
+    'CatBoost_Base_Random_optuna': '#b2df8a',
+    'CatBoost_Yeo_Random_basic': '#a6cee3',
+    'CatBoost_Yeo_Random_optuna': '#1f78b4'
+})

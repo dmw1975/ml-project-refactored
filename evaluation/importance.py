@@ -18,6 +18,41 @@ from data import load_features_data, load_scores_data, get_base_and_yeo_features
 def calculate_permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42):
     """Calculate permutation importance for a model."""
     try:
+        # Verify feature alignment between model and X_test
+        if hasattr(model, 'feature_names_in_'):
+            # Check if the model's expected features match the test data
+            expected_features = model.feature_names_in_
+            
+            # Print feature counts for verification
+            print(f"Model expects {len(expected_features)} features")
+            print(f"X_test has {X_test.shape[1]} features")
+            
+            # Check for missing features
+            if len(expected_features) != X_test.shape[1]:
+                print(f"WARNING: Feature count mismatch. Model expects {len(expected_features)} features but X_test has {X_test.shape[1]}")
+                
+                # Identify missing features in both directions
+                missing_in_X = [f for f in expected_features if f not in X_test.columns]
+                extra_in_X = [f for f in X_test.columns if f not in expected_features]
+                
+                if missing_in_X:
+                    print(f"Features expected by model but missing in X_test: {missing_in_X[:5] if len(missing_in_X) > 5 else missing_in_X}")
+                if extra_in_X:
+                    print(f"Extra features in X_test not used by model: {extra_in_X[:5] if len(extra_in_X) > 5 else extra_in_X}")
+                
+                # Ensure X_test only contains the features the model expects, in the right order
+                try:
+                    X_test = X_test[expected_features].copy()
+                    print("Successfully aligned X_test features with model's expected features")
+                except Exception as align_err:
+                    print(f"ERROR: Could not align features: {align_err}")
+                    raise
+            else:
+                # Even if counts match, ensure ordering is correct
+                X_test = X_test[expected_features].copy()
+                print("Features are already aligned (same count and names)")
+        
+        # Now calculate permutation importance
         perm_importance = permutation_importance(
             model, X_test, y_test,
             n_repeats=n_repeats,
@@ -35,9 +70,15 @@ def calculate_permutation_importance(model, X_test, y_test, n_repeats=10, random
         # Sort by importance
         importance_df = importance_df.sort_values('Importance', ascending=False)
         
+        # Print summary of resulting importance
+        print(f"Calculated importance for {len(importance_df)} features")
+        print(f"Top 5 important features: {', '.join(importance_df['Feature'].head(5).tolist())}")
+        
         return importance_df
     except Exception as e:
         print(f"Error in permutation importance calculation: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def analyze_feature_importance(all_models=None):
@@ -81,7 +122,31 @@ def analyze_feature_importance(all_models=None):
         # Use the original feature dataframe and extract only the needed features
         X_test = None  # Initialize to None to check if it gets set properly
         
-        if model_name in trained_feature_sets:
+        # Special handling for LightGBM models
+        if 'LightGBM_' in model_name and 'X_test_clean' in model_data:
+            print(f"Using stored clean test data for LightGBM model {model_name}")
+            X_test = model_data['X_test_clean']
+            print(f"Clean test data shape: {X_test.shape}")
+            
+            # Use the feature name mapping for the feature names
+            if 'feature_name_mapping' in model_data:
+                feature_names = list(model_data['feature_name_mapping'].keys())
+                print(f"Using {len(feature_names)} feature names from mapping")
+            else:
+                feature_names = None
+        # Special handling for CatBoost models
+        elif 'CatBoost_' in model_name and 'X_test' in model_data:
+            print(f"Using stored test data for CatBoost model {model_name}")
+            X_test = model_data['X_test']
+            print(f"Test data shape: {X_test.shape}")
+            
+            # Use feature_names from the model data
+            if 'feature_names' in model_data:
+                feature_names = model_data['feature_names']
+                print(f"Using {len(feature_names)} feature names from model data")
+            else:
+                feature_names = None
+        elif model_name in trained_feature_sets:
             feature_names = trained_feature_sets[model_name]
             
             # Check if all required features exist in the original dataframe
@@ -154,7 +219,7 @@ def analyze_feature_importance(all_models=None):
             continue  # Skip this model
             
         # Double-check feature alignment
-        if not all(f in X_test.columns for f in feature_names):
+        if feature_names is not None and not all(f in X_test.columns for f in feature_names):
             print(f"Error: Feature mismatch after dataset preparation")
             missing = [f for f in feature_names if f not in X_test.columns]
             print(f"Missing features: {missing[:5]}")

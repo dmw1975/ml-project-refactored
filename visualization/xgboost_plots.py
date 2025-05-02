@@ -1,23 +1,34 @@
-"""Visualization functions for XGBoost models."""
+"""Visualization functions for XGBoost models (DEPRECATED).
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+This module is deprecated and will be removed in a future version.
+Please use visualization_new package instead.
+"""
+
+import warnings
 from pathlib import Path
 import sys
-import optuna.visualization as optuna_vis
+
+warnings.warn(
+    "This module is deprecated. Please use visualization_new.adapters.xgboost_adapter instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
 from config import settings
-from visualization.style import setup_visualization_style, save_figure
 from utils import io
 
 def plot_xgboost_comparison():
     """Compare basic vs. Optuna-optimized XGBoost models."""
+    # Import required modules
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from visualization.style import setup_visualization_style, save_figure
+    
     # Set up style
     style = setup_visualization_style()
     
@@ -128,6 +139,10 @@ def plot_xgboost_comparison():
 
 def plot_optuna_optimization_history():
     """Plot Optuna optimization history for each dataset."""
+    # Import required modules
+    import optuna.visualization as optuna_vis
+    from visualization.style import setup_visualization_style
+    
     # Set up style
     style = setup_visualization_style()
     
@@ -172,6 +187,11 @@ def plot_optuna_optimization_history():
 
 def plot_xgboost_hyperparameter_comparison():
     """Create a comparison of hyperparameters across models."""
+    # Import required modules
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from visualization.style import setup_visualization_style, save_figure
+    
     # Set up style
     style = setup_visualization_style()
     

@@ -32,7 +32,7 @@ def load_all_models():
         print("No ElasticNet models found")
         elastic_models = {}
 
-     # Load XGBoost models (ADD THIS SECTION)
+     # Load XGBoost models
     try:
         xgboost_models = io.load_model("xgboost_models.pkl", settings.MODEL_DIR)
         print(f"Loaded {len(xgboost_models)} XGBoost models")
@@ -40,8 +40,16 @@ def load_all_models():
         print("No XGBoost models found")
         xgboost_models = {}
     
+    # Load LightGBM models
+    try:
+        lightgbm_models = io.load_model("lightgbm_models.pkl", settings.MODEL_DIR)
+        print(f"Loaded {len(lightgbm_models)} LightGBM models")
+    except:
+        print("No LightGBM models found")
+        lightgbm_models = {}
+    
     # Combine all models
-    all_models = {**linear_models, **elastic_models, **xgboost_models}
+    all_models = {**linear_models, **elastic_models, **xgboost_models, **lightgbm_models}
     
        
     return all_models
@@ -115,7 +123,11 @@ def create_comparison_table(all_models):
             'n_features_used': model_data.get('n_features_used', None),
             'alpha': model_data.get('alpha', None),
             'l1_ratio': model_data.get('l1_ratio', None),
-            'model_type': 'ElasticNet' if 'ElasticNet' in model_name else 'Linear Regression'
+            'model_type': model_data.get('model_type', 
+                        'ElasticNet' if 'ElasticNet' in model_name 
+                        else 'XGBoost' if 'XGB_' in model_name
+                        else 'LightGBM' if 'LightGBM_' in model_name
+                        else 'Linear Regression')
         }
         model_metrics.append(metrics)
     

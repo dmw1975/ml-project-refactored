@@ -1,9 +1,20 @@
-"""Visualization functions for model metrics and performance."""
+"""Visualization functions for model metrics and performance (DEPRECATED).
+
+This module is deprecated and will be removed in a future version.
+Please use visualization_new package instead.
+"""
+
+import warnings
+
+warnings.warn(
+    "This module is deprecated. Please use visualization_new.plots.metrics instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 import sys
 
@@ -14,7 +25,6 @@ sys.path.append(str(project_root))
 from config import settings
 from visualization.style import setup_visualization_style, save_figure
 from utils import io
-from utils.helpers import safe_float  # Import the safe_float function
 
 def mean_confidence_interval(data, confidence=0.95):
     """Calculate mean and confidence interval."""
@@ -34,6 +44,10 @@ def plot_elasticnet_cv_distribution(cv_results=None):
     cv_results : list, optional
         List of CV result dictionaries. If None, it will be loaded.
     """
+    # Import required modules
+    import seaborn as sns
+    from matplotlib.lines import Line2D
+    
     # Set up style
     style = setup_visualization_style()
     
@@ -123,6 +137,8 @@ def plot_elasticnet_best_params(cv_results, output_dir=None):
     output_dir : Path, optional
         Directory to save plot. If None, it will use the default.
     """
+    # Import required modules
+    import seaborn as sns
     if output_dir is None:
         output_dir = settings.VISUALIZATION_DIR / "performance"
         io.ensure_dir(output_dir)
@@ -259,6 +275,8 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
     """
     Plot thesis-quality residuals analysis for models.
     
+    This function is now a wrapper that calls create_residual_plots.py to ensure consistent residual plots.
+    
     Parameters:
     -----------
     output_dir : Path or str, optional
@@ -268,104 +286,54 @@ def plot_residuals(output_dir=None, best_model_name=None, top_n=4):
     top_n : int, default=4
         Number of models to include in multi-model plot.
     """
-    from matplotlib import rcParams
-    import matplotlib.ticker as ticker
-    from scipy import stats
-
-    # Set up style
-    style = setup_visualization_style()
-
+    from visualization.create_residual_plots import create_thesis_residual_plot, load_all_models
+    
+    print("Generating residual plots using create_residual_plots.py...")
+    
+    # Set default output directory
     if output_dir is None:
-        output_dir = settings.VISUALIZATION_DIR / "performance"
+        output_dir = settings.VISUALIZATION_DIR / "residuals"
     io.ensure_dir(output_dir)
-
+    
     try:
-        # Load residuals
-        residuals = io.load_model("model_residuals.pkl", settings.METRICS_DIR)
-
-        print("Available models for residual plots:")
-        for model in residuals.keys():
-            print(f"  - {model}")
-
-        # Load metrics to find best model
-        metrics_file = settings.METRICS_DIR / "all_models_comparison.csv"
-        if metrics_file.exists():
-            metrics_df = pd.read_csv(metrics_file)
-
+        # Load all models
+        all_models = load_all_models()
+        
+        if not all_models:
+            print("No models found. Please train models first.")
+            return None
+        
+        # Determine which model to plot
+        if best_model_name is None:
+            # Find best model by loading metrics
+            metrics_file = settings.METRICS_DIR / "all_models_comparison.csv"
+            if metrics_file.exists():
+                metrics_df = pd.read_csv(metrics_file)
+                if not metrics_df.empty:
+                    best_model_name = metrics_df.sort_values('RMSE').iloc[0]['model_name']
+            
+            # If still None, use first model
             if best_model_name is None:
-                best_model_name = metrics_df.sort_values('RMSE').iloc[0]['model_name']
-        else:
-            if best_model_name is None:
-                best_model_name = list(residuals.keys())[0]
-
-        if best_model_name not in residuals:
-            print(f"Model {best_model_name} not found in residuals.")
-            return
-
-        # Thesis-quality settings
-        rcParams.update({'font.size': 14})
-
-        print(f"Plotting residuals for {best_model_name}")
-        model_res = residuals[best_model_name]
-
-        # Create figure
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-
-        # 1. Predicted vs Actual
-        ax = axes[0, 0]
-        ax.scatter(model_res['y_pred'], model_res['y_test'], alpha=0.7, color='#3498db')
-        min_val = min(model_res['y_pred'].min(), model_res['y_test'].min())
-        max_val = max(model_res['y_pred'].max(), model_res['y_test'].max())
-        ax.plot([min_val, max_val], [min_val, max_val], 'r--')
-        ax.set_xlabel('Predicted ESG Score')
-        ax.set_ylabel('Actual ESG Score')
-        ax.set_title('Predicted vs Actual Values', fontsize=16)
-        ax.grid(alpha=0.5)
-
-        corr = np.corrcoef(model_res['y_pred'], model_res['y_test'])[0, 1]
-        ax.text(0.05, 0.95, f'Correlation: {corr:.4f}', transform=ax.transAxes,
-                fontsize=12, verticalalignment='top')
-
-        # 2. Residuals vs Predicted
-        ax = axes[0, 1]
-        ax.scatter(model_res['y_pred'], model_res['residuals'], alpha=0.7, color='#2ecc71')
-        ax.axhline(y=0, color='red', linestyle='--')
-        ax.set_xlabel('Predicted ESG Score')
-        ax.set_ylabel('Residual')
-        ax.set_title('Residuals vs Predicted Values', fontsize=16)
-        ax.grid(alpha=0.5)
-
-        # 3. Histogram of Residuals
-        ax = axes[1, 0]
-        sns.histplot(model_res['residuals'], kde=True, ax=ax, color='#e67e22')
-        ax.axvline(x=0, color='red', linestyle='--')
-        ax.set_xlabel('Residual')
-        ax.set_ylabel('Density')
-        ax.set_title('Distribution of Residuals', fontsize=16)
-
-        mean_res = model_res['residuals'].mean()
-        std_res = model_res['residuals'].std()
-        ax.text(0.05, 0.95, f'Mean: {mean_res:.4f}\nStd: {std_res:.4f}', transform=ax.transAxes,
-                fontsize=12, verticalalignment='top')
-
-        # 4. Q-Q Plot
-        ax = axes[1, 1]
-        standardized_residuals = (model_res['residuals'] - mean_res) / std_res
-        stats.probplot(standardized_residuals, dist="norm", plot=ax)
-        ax.set_title('Normal Q-Q Plot of Standardized Residuals', fontsize=16)
-        ax.grid(alpha=0.5)
-
-        # Tight layout and supertitle
-        plt.suptitle(f'Residual Analysis for {best_model_name}', fontsize=20, y=1.02)
-        plt.tight_layout(pad=2.0)
-
-        # Save figure high-res PDF
-        save_figure(fig, f"{best_model_name}_thesis_residuals", output_dir, dpi=300, format='png')
-
-        print(f"High-quality residual plot saved to {output_dir}")
-        plt.close(fig)
-        return fig
-
+                best_model_name = list(all_models.keys())[0]
+        
+        # Check if model exists
+        if best_model_name not in all_models:
+            print(f"Model {best_model_name} not found. Available models:")
+            for model in all_models.keys():
+                print(f"  - {model}")
+            
+            # Use first model instead
+            best_model_name = list(all_models.keys())[0]
+            print(f"Using {best_model_name} instead.")
+        
+        # Create residual plot for the best model
+        print(f"Creating residual plot for {best_model_name}...")
+        
+        plot_path = create_thesis_residual_plot(best_model_name, all_models[best_model_name], output_dir)
+        print(f"Residual plot saved to {plot_path}")
+        
+        return None
+    
     except Exception as e:
         print(f"Error generating residual plots: {e}")
         import traceback

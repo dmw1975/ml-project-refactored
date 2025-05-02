@@ -62,35 +62,13 @@ def load_scores_data():
         f"Tried locations: {[str(p) for p in potential_paths]}"
     )
 
-def get_base_and_yeo_features(feature_df):
-    base_path = Path("data/pkl/base_columns.pkl")
-    yeo_path = Path("data/pkl/yeo_columns.pkl")
-    
-    with open(base_path, 'rb') as f:
-        base_columns = pickle.load(f)
-
-    with open(yeo_path, 'rb') as f:
-        yeo_columns = pickle.load(f)
-    
-    available_base_columns = [col for col in base_columns if col in feature_df.columns]
-    available_yeo_columns = [col for col in yeo_columns if col in feature_df.columns]
-
-    # ALSO keep sector columns
-    sector_columns = [col for col in feature_df.columns if col.startswith('gics_sector_') or col.startswith('sector_')]
-
-    # Create LR_Base and LR_Yeo datasets
-    LR_Base = feature_df[available_base_columns + sector_columns].copy()
-    LR_Yeo = feature_df[available_yeo_columns + sector_columns].copy()
-
-    return LR_Base, LR_Yeo, available_base_columns, available_yeo_columns
-
-
-
-
-
 """
+Corrected fix for Yeo-Johnson transformation implementation in data.py
+Replace the get_base_and_yeo_features function with this improved version.
+"""
+
 def get_base_and_yeo_features(feature_df):
-    
+    """
     Get base features and Yeo-Johnson transformed features from pre-saved pickle files.
     
     Returns:
@@ -103,6 +81,9 @@ def get_base_and_yeo_features(feature_df):
         List of column names in LR_Base
     yeo_columns : list
         List of column names in LR_Yeo
+    """
+    import pickle
+    from pathlib import Path
     
     # Define the correct paths for pickle files
     base_path = Path("data/pkl/base_columns.pkl")
@@ -122,56 +103,53 @@ def get_base_and_yeo_features(feature_df):
     
     print(f"Loading yeo columns from: {yeo_path}")
     with open(yeo_path, 'rb') as f:
-        yeo_columns = pickle.load(f)
+        yeo_columns_from_pickle = pickle.load(f)
     
     # Print feature counts for verification
     print(f"Base features in pickle: {len(base_columns)} columns")
-    print(f"Yeo features in pickle: {len(yeo_columns)} columns")
+    print(f"Yeo features in pickle: {len(yeo_columns_from_pickle)} columns")
     
     # Filter columns to only include those available in the dataframe
     available_base_columns = [col for col in base_columns if col in feature_df.columns]
     
-    # Create the base dataframe
+    # Create the base dataframe with available columns
     LR_Base = feature_df[available_base_columns].copy()
     
-    # CORRECTED APPROACH: Properly separate numerical and categorical features
-    # First, identify all numerical features that have Yeo-transformed versions
+    # CORRECTLY HANDLE YEO TRANSFORMATION:
     yeo_prefix = 'yeo_joh_'
+    
+    # 1. Identify all columns that have Yeo-transformed versions in the dataframe
     yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
     
-    # Get the original column names from the transformed ones
+    # 2. Get the original column names from the transformed ones
     original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
     
-    # Identify categorical columns (those in base but not in original numerical)
+    # 3. Identify categorical columns (those in base but not in original numerical)
     categorical_columns = [col for col in available_base_columns 
                           if col not in original_numerical_columns]
     
-    # Create Yeo dataset with both transformed numerical and original categorical features
+    print(f"\nFeature type breakdown:")
+    print(f"  - Numerical features with Yeo transformations: {len(yeo_transformed_columns)}")
+    print(f"  - Categorical features (no transformation): {len(categorical_columns)}")
+    
+    # 4. Create Yeo dataset with both transformed numerical and original categorical features
     complete_yeo_columns = yeo_transformed_columns + categorical_columns
     
-    # Create the Yeo dataframe
+    # 5. Create the Yeo dataframe
     LR_Yeo = feature_df[complete_yeo_columns].copy()
     
-    # Print detailed information about the feature composition
-    print(f"\nFeature breakdown:")
-    print(f"  LR_Base: {len(available_base_columns)} total features")
-    print(f"  LR_Yeo: {len(complete_yeo_columns)} total features")
-    print(f"    - {len(yeo_transformed_columns)} Yeo-transformed numerical features")
-    print(f"    - {len(categorical_columns)} categorical features")
-
-    available_yeo_columns = [col for col in yeo_columns if col in feature_df.columns]
-    print(f"Available Yeo columns (in both pickle and dataframe): {len(available_yeo_columns)}")
-    print(f"Missing Yeo columns: {len(yeo_columns) - len(available_yeo_columns)}")
+    # Additional validation
+    print(f"\nFinal dataset dimensions:")
+    print(f"  LR_Base: {LR_Base.shape} - {len(LR_Base.columns)} columns")
+    print(f"  LR_Yeo: {LR_Yeo.shape} - {len(LR_Yeo.columns)} columns")
     
-    # Verify no overlap between numerical and categorical
-    overlap = set(yeo_transformed_columns).intersection(set(categorical_columns))
-    if overlap:
-        print(f"WARNING: {len(overlap)} overlapping columns between numerical and categorical!")
+    # Verify that Yeo column count matches expectations
+    expected_yeo_count = len(yeo_transformed_columns) + len(categorical_columns)
+    if len(LR_Yeo.columns) != expected_yeo_count:
+        print(f"WARNING: Unexpected column count in LR_Yeo.")
+        print(f"  Expected: {expected_yeo_count}, Actual: {len(LR_Yeo.columns)}")
     
     return LR_Base, LR_Yeo, available_base_columns, complete_yeo_columns
-
-"""
-
 def add_random_feature(df, seed=42):
     """
     Add a random feature to a dataset for feature importance benchmarking.

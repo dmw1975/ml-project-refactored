@@ -1,8 +1,8 @@
-"""XGBoost models for ESG score prediction with Optuna optimization."""
+"""LightGBM models for ESG score prediction with Optuna optimization."""
 
 import numpy as np
 import pandas as pd
-from xgboost import XGBRegressor
+import lightgbm as lgb
 from sklearn.model_selection import train_test_split, KFold
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import optuna
@@ -22,8 +22,8 @@ import os
 
 # Cleanup old results
 def cleanup_old_results():
-    model_file = settings.MODEL_DIR / "xgboost_models.pkl"
-    metrics_file = settings.METRICS_DIR / "xgboost_metrics.csv"
+    model_file = settings.MODEL_DIR / "lightgbm_models.pkl"
+    metrics_file = settings.METRICS_DIR / "lightgbm_metrics.csv"
 
     # Remove old model file if exists
     if model_file.exists():
@@ -39,11 +39,11 @@ def cleanup_old_results():
 cleanup_old_results()
 
 
-def train_basic_xgb(X, y, dataset_name):
-    """Train a basic XGBoost model with default parameters, ensuring sector columns exist."""
-    print(f"\n--- Training Basic XGBoost on {dataset_name} ---")
+def train_basic_lgb(X, y, dataset_name):
+    """Train a basic LightGBM model with default parameters, ensuring sector columns exist."""
+    print(f"\n--- Training Basic LightGBM on {dataset_name} ---")
 
-    # 🔵 Check and ensure sector columns exist
+    # Check and ensure sector columns exist
     sector_cols = [col for col in X.columns if col.startswith('gics_sector_')]
     if not sector_cols:
         print("Warning: No sector columns found in X, adding them from full feature data...")
@@ -57,13 +57,46 @@ def train_basic_xgb(X, y, dataset_name):
 
     # Now safe to stratify
     X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
-        X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2), 
-        random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
+        X, y, test_size=settings.LIGHTGBM_PARAMS.get('test_size', 0.2), 
+        random_state=settings.LIGHTGBM_PARAMS.get('random_state', 42)
     )
     
-    model = XGBRegressor(random_state=settings.XGBOOST_PARAMS.get('random_state', 42))
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
+    # Clean feature names for LightGBM (it doesn't support special JSON characters)
+    # Create a mapping of original to cleaned names
+    feature_names = X_train.columns.tolist()
+    cleaned_feature_names = []
+    
+    # Create simple, numeric feature names to avoid any issues
+    for i in range(len(feature_names)):
+        cleaned_feature_names.append(f"feature_{i}")
+    
+    # Create a copy with cleaned column names
+    X_train_clean = X_train.copy()
+    X_train_clean.columns = cleaned_feature_names
+    X_test_clean = X_test.copy()
+    X_test_clean.columns = cleaned_feature_names
+    
+    # Store the mapping for later reference
+    feature_name_mapping = dict(zip(cleaned_feature_names, feature_names))
+    
+    # Create LightGBM dataset
+    train_data = lgb.Dataset(X_train_clean, label=y_train)
+    
+    # Default parameters
+    params = {
+        'objective': 'regression',
+        'metric': 'rmse',
+        'verbosity': -1,
+        'boosting_type': 'gbdt',
+        'random_state': settings.LIGHTGBM_PARAMS.get('random_state', 42)
+    }
+    
+    # Train model
+    num_round = 100
+    model = lgb.train(params, train_data, num_round)
+    
+    # Make predictions on cleaned X_test
+    y_pred = model.predict(X_test_clean)
     
     # Calculate metrics
     mse = mean_squared_error(y_test, y_pred)
@@ -90,38 +123,67 @@ def train_basic_xgb(X, y, dataset_name):
         'y_test': y_test,
         'y_pred': y_pred,
         'n_features': X.shape[1],
-        'model_type': 'XGBoost Basic'
+        'feature_names': X.columns.tolist(),
+        'feature_name_mapping': feature_name_mapping,
+        'cleaned_feature_names': cleaned_feature_names,
+        'X_test_clean': X_test_clean,  # Store the cleaned test data for importance calculation
+        'model_type': 'LightGBM Basic'
     }
 
 
-def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
-    """Optimize XGBoost hyperparameters using Optuna, reporting mean and std of CV scores."""
-    print(f"\n--- Optimizing XGBoost on {dataset_name} with Optuna ---")
+def optimize_lgb_with_optuna(X, y, dataset_name, n_trials=50):
+    """Optimize LightGBM hyperparameters using Optuna, reporting mean and std of CV scores."""
+    print(f"\n--- Optimizing LightGBM on {dataset_name} with Optuna ---")
+    
+    # Create a cleaned version of X for all operations
+    feature_names = X.columns.tolist()
+    cleaned_feature_names = []
+    
+    # Create simple, numeric feature names to avoid any issues
+    for i in range(len(feature_names)):
+        cleaned_feature_names.append(f"feature_{i}")
+    
+    # Create a copy with cleaned column names
+    X_clean = X.copy()
+    X_clean.columns = cleaned_feature_names
+    
+    # Store the mapping for later reference
+    feature_name_mapping = dict(zip(cleaned_feature_names, feature_names))
     
     def objective(trial):
+        # Define hyperparameters to optimize
         params = {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 1000, step=100),
-            'max_depth': trial.suggest_int('max_depth', 3, 10),
+            'objective': 'regression',
+            'metric': 'rmse',
+            'verbosity': -1,
+            'boosting_type': 'gbdt',
+            'num_leaves': trial.suggest_int('num_leaves', 20, 200),
             'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-            'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-            'gamma': trial.suggest_float('gamma', 1e-8, 1.0, log=True),
-            'subsample': trial.suggest_float('subsample', 0.5, 1.0),
-            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
-            'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
-            'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
-            'random_state': settings.XGBOOST_PARAMS.get('random_state', 42)
+            'feature_fraction': trial.suggest_float('feature_fraction', 0.5, 1.0),
+            'bagging_fraction': trial.suggest_float('bagging_fraction', 0.5, 1.0),
+            'bagging_freq': trial.suggest_int('bagging_freq', 1, 10),
+            'min_child_samples': trial.suggest_int('min_child_samples', 5, 100),
+            'lambda_l1': trial.suggest_float('lambda_l1', 1e-8, 10.0, log=True),
+            'lambda_l2': trial.suggest_float('lambda_l2', 1e-8, 10.0, log=True),
+            'random_state': settings.LIGHTGBM_PARAMS.get('random_state', 42)
         }
         
         # Use 5-fold cross-validation
         cv_scores = []
-        kf = KFold(n_splits=5, shuffle=True, random_state=settings.XGBOOST_PARAMS.get('random_state', 42))
+        kf = KFold(n_splits=5, shuffle=True, random_state=settings.LIGHTGBM_PARAMS.get('random_state', 42))
         
-        for train_idx, val_idx in kf.split(X):
-            X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+        for train_idx, val_idx in kf.split(X_clean):
+            X_train, X_val = X_clean.iloc[train_idx], X_clean.iloc[val_idx]
             y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
             
-            model = XGBRegressor(**params)
-            model.fit(X_train, y_train)
+            # Create LightGBM dataset
+            train_data = lgb.Dataset(X_train, label=y_train)
+            
+            # Train model
+            num_round = 100
+            model = lgb.train(params, train_data, num_round)
+            
+            # Predict and evaluate
             y_pred = model.predict(X_val)
             mse = mean_squared_error(y_val, y_pred)
             cv_scores.append(mse)
@@ -145,6 +207,13 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
     mean_cv_mse = best_trial.user_attrs["mean_cv_mse"]
     std_cv_mse = best_trial.user_attrs["std_cv_mse"]
     
+    # Add default parameters that weren't optimized
+    best_params['objective'] = 'regression'
+    best_params['metric'] = 'rmse'
+    best_params['verbosity'] = -1
+    best_params['boosting_type'] = 'gbdt'
+    best_params['random_state'] = settings.LIGHTGBM_PARAMS.get('random_state', 42)
+    
     print(f"\nBest Params for {dataset_name}:")
     for param, value in best_params.items():
         print(f"  {param}: {value}")
@@ -152,13 +221,25 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
     
     # Train final model with best parameters
     X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
-        X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2),
-        random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
+        X, y, test_size=settings.LIGHTGBM_PARAMS.get('test_size', 0.2),
+        random_state=settings.LIGHTGBM_PARAMS.get('random_state', 42)
     )
-
-    best_model = XGBRegressor(**best_params)
-    best_model.fit(X_train, y_train)
-    y_pred = best_model.predict(X_test)
+    
+    # Create clean versions for training and testing
+    X_train_clean = X_train.copy()
+    X_train_clean.columns = cleaned_feature_names
+    X_test_clean = X_test.copy()
+    X_test_clean.columns = cleaned_feature_names
+    
+    # Create LightGBM dataset
+    train_data = lgb.Dataset(X_train_clean, label=y_train)
+    
+    # Train model
+    num_round = 100
+    best_model = lgb.train(best_params, train_data, num_round)
+    
+    # Predict and evaluate
+    y_pred = best_model.predict(X_test_clean)
     
     # Calculate test metrics
     mse = mean_squared_error(y_test, y_pred)
@@ -189,14 +270,18 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
         'y_test': y_test,
         'y_pred': y_pred,
         'n_features': X.shape[1],
-        'model_type': 'XGBoost Optuna',
+        'feature_names': X.columns.tolist(),
+        'feature_name_mapping': feature_name_mapping,
+        'cleaned_feature_names': cleaned_feature_names,
+        'X_test_clean': X_test_clean,  # Store the cleaned test data for importance calculation
+        'model_type': 'LightGBM Optuna',
         'study': study  # Include study object for potential further analysis
     }
 
 
-def train_xgboost_models(datasets=None, n_trials=50):
+def train_lightgbm_models(datasets=None, n_trials=50):
     """
-    Train and optimize XGBoost models for all datasets.
+    Train and optimize LightGBM models for all datasets.
     """
     print("Loading data...")
     feature_df = load_features_data()
@@ -221,7 +306,6 @@ def train_xgboost_models(datasets=None, n_trials=50):
         print(f"Warning: {len(missing_yeo_cols)} columns from yeo_columns pickle are missing in LR_Yeo dataset")
         print(f"First few missing: {missing_yeo_cols[:5] if len(missing_yeo_cols) > 5 else missing_yeo_cols}")
         
-        # Add missing columns if they exist in the feature dataframe
         # Create a copy first to avoid SettingWithCopyWarning
         LR_Yeo = LR_Yeo.copy()
         
@@ -247,7 +331,7 @@ def train_xgboost_models(datasets=None, n_trials=50):
     LR_Base_random = add_random_feature(LR_Base)
     LR_Yeo_random = add_random_feature(LR_Yeo)
     
-    # 🔵 Ensure random datasets also contain sector columns
+    # Ensure random datasets also contain sector columns
     for sector_col in sector_columns:
         if sector_col not in LR_Base_random.columns:
             LR_Base_random[sector_col] = feature_df[sector_col]
@@ -259,10 +343,10 @@ def train_xgboost_models(datasets=None, n_trials=50):
     
     # Define all available datasets
     all_datasets = [
-        {'data': LR_Base, 'name': 'XGB_Base'},
-        {'data': LR_Yeo, 'name': 'XGB_Yeo'},
-        {'data': LR_Base_random, 'name': 'XGB_Base_Random'},
-        {'data': LR_Yeo_random, 'name': 'XGB_Yeo_Random'}
+        {'data': LR_Base, 'name': 'LightGBM_Base'},
+        {'data': LR_Yeo, 'name': 'LightGBM_Yeo'},
+        {'data': LR_Base_random, 'name': 'LightGBM_Base_Random'},
+        {'data': LR_Yeo_random, 'name': 'LightGBM_Yeo_Random'}
     ]
     
     # Filter datasets if specified
@@ -272,22 +356,22 @@ def train_xgboost_models(datasets=None, n_trials=50):
         selected_datasets = all_datasets
     
     print("\n" + "="*50)
-    print(f"Training XGBoost Models for {len(selected_datasets)} Datasets")
+    print(f"Training LightGBM Models for {len(selected_datasets)} Datasets")
     print("="*50)
     
     model_results = {}
     
     for config in selected_datasets:
         basic_name = f"{config['name']}_basic"
-        basic_results = train_basic_xgb(config['data'], y, basic_name)
+        basic_results = train_basic_lgb(config['data'], y, basic_name)
         model_results[basic_name] = basic_results
         
         optuna_name = f"{config['name']}_optuna"
-        optuna_results = optimize_xgb_with_optuna(config['data'], y, optuna_name, n_trials=n_trials)
+        optuna_results = optimize_lgb_with_optuna(config['data'], y, optuna_name, n_trials=n_trials)
         model_results[optuna_name] = optuna_results
     
     # Save results
-    io.save_model(model_results, "xgboost_models.pkl", settings.MODEL_DIR)
+    io.save_model(model_results, "lightgbm_models.pkl", settings.MODEL_DIR)
     
     # Save summary to CSV
     metrics_df = pd.DataFrame([
@@ -307,14 +391,12 @@ def train_xgboost_models(datasets=None, n_trials=50):
     ])
 
     io.ensure_dir(settings.METRICS_DIR)
-    metrics_df.to_csv(f"{settings.METRICS_DIR}/xgboost_metrics.csv", index=False)
+    metrics_df.to_csv(f"{settings.METRICS_DIR}/lightgbm_metrics.csv", index=False)
     
-    print("\nXGBoost models trained and saved successfully.")
+    print("\nLightGBM models trained and saved successfully.")
     return model_results
-
-    
 
 
 if __name__ == "__main__":
     # Run this file directly to train all models
-    train_xgboost_models()
+    train_lightgbm_models()
