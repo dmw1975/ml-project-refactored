@@ -65,8 +65,8 @@ class FeatureImportancePlot(ModelViz):
             top_features['Feature'][::-1],  # Reverse to have highest at the top
             top_features['Importance'][::-1],
             xerr=top_features['Std'][::-1] if self.config.get('show_error', True) else None,
-            color=self.style.get('colors', {}).get('primary', '#3498db'),
-            alpha=0.7,
+            color=self.style.get('colors', {}).get('primary', '#3498db'),  # Use standard blue color
+            alpha=0.8,  # Slightly increased alpha for better visibility
             error_kw={'ecolor': 'gray', 'capsize': 5} if self.config.get('show_error', True) else None
         )
         
@@ -285,9 +285,25 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                 format=self.config.get('format', 'png')
             )
         
+        # Check if we should create heatmap
+        # For LightGBM models, we'll set create_heatmap to False by default
+        # This can be overridden by explicitly setting create_heatmap in the config
+        create_heatmap = self.config.get('create_heatmap')
+        if create_heatmap is None:  # Not explicitly set
+            # Check if this is for LightGBM models based on output directory
+            output_dir = self.config.get('output_dir')
+            if output_dir and 'lightgbm' in str(output_dir).lower():
+                # Skip heatmap for LightGBM by default
+                create_heatmap = False
+            else:
+                # Default to True for other models
+                create_heatmap = True
+        
         # Create heatmap if requested
-        if self.config.get('create_heatmap', True):
+        if create_heatmap:
             self._create_heatmap(top_df.drop('avg_importance', axis=1))
+        else:
+            print("Skipping heatmap creation as per configuration")
         
         # Show figure if requested
         if self.config.get('show', False):
@@ -305,6 +321,17 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
         Returns:
             matplotlib.figure.Figure: Heatmap figure
         """
+        # Check if this is for LightGBM models based on output directory
+        output_dir = self.config.get('output_dir')
+        if output_dir:
+            # Convert to string to handle both string and Path objects
+            output_dir_str = str(output_dir)
+            # Skip heatmap creation for LightGBM models
+            if 'lightgbm' in output_dir_str.lower():
+                print("Skipping heatmap creation for LightGBM models as it's not needed")
+                # Return empty figure to maintain API compatibility
+                return plt.figure()
+        
         # Create figure
         fig, ax = plt.subplots(figsize=self.config.get('figsize', (12, 12)))
         

@@ -50,9 +50,23 @@ def plot_top_features(importance_results=None, top_n=20):
             print("No feature importance data found. Please run feature importance analysis first.")
             return
     
-    # Set up output directory
-    output_dir = settings.VISUALIZATION_DIR / "features"
-    io.ensure_dir(output_dir)
+    # Set up output directories
+    features_dir = settings.VISUALIZATION_DIR / "features"
+    io.ensure_dir(features_dir)
+    
+    # Set up model-specific subdirectories
+    linear_dir = features_dir / "linear"
+    xgboost_dir = features_dir / "xgboost"
+    lightgbm_dir = features_dir / "lightgbm"
+    catboost_dir = features_dir / "catboost"
+    
+    io.ensure_dir(linear_dir)
+    io.ensure_dir(xgboost_dir)
+    io.ensure_dir(lightgbm_dir)
+    io.ensure_dir(catboost_dir)
+    
+    # Use features_dir as the main output directory
+    output_dir = features_dir
     
     # Create consolidated importance table
     all_features = set()
@@ -76,7 +90,9 @@ def plot_top_features(importance_results=None, top_n=20):
     # Sort by average importance
     consolidated = consolidated.sort_values('avg_importance', ascending=False)
     
-    # 1. Plot top features by average importance
+    # 1. Plot top features by average importance - DISABLED
+    # The following code has been disabled to prevent generating top_N_features_avg_importance.png
+    """
     fig, ax = plt.subplots(figsize=(12, 10))
     
     top_df = consolidated.head(top_n)
@@ -97,8 +113,11 @@ def plot_top_features(importance_results=None, top_n=20):
     
     plt.tight_layout()
     save_figure(fig, f"top_{top_n}_features_avg_importance", output_dir)
+    """
     
-    # 2. Create heatmap of top features across models
+    # 2. Create heatmap of top features across models - DISABLED
+    # The following code has been disabled to prevent generating top_features_heatmap.png
+    """
     fig, ax = plt.subplots(figsize=(12, 12))
     
     # Get top 30 features for heatmap
@@ -115,8 +134,11 @@ def plot_top_features(importance_results=None, top_n=20):
     
     plt.tight_layout()
     save_figure(fig, "top_features_heatmap", output_dir)
+    """
     
-    # 3. Plot feature importance distributions for top features
+    # 3. Plot feature importance distributions for top features - DISABLED
+    # The following code has been disabled to prevent generating top_features_distribution.png
+    """
     fig, ax = plt.subplots(figsize=(12, 8))
     
     # Select top 10 features
@@ -155,8 +177,11 @@ def plot_top_features(importance_results=None, top_n=20):
     
     plt.tight_layout()
     save_figure(fig, "top_features_distribution", output_dir)
+    """
     
-    # 4. Plot random feature performance if available
+    # 4. Plot random feature performance if available - DISABLED
+    # The following code has been disabled to prevent generating random_feature_rank.png
+    """
     random_csv = settings.FEATURE_IMPORTANCE_DIR / "random_feature_stats.csv"
     if random_csv.exists():
         random_df = pd.read_csv(random_csv)
@@ -180,8 +205,9 @@ def plot_top_features(importance_results=None, top_n=20):
         
         plt.tight_layout()
         save_figure(fig, "random_feature_rank", output_dir)
+    """
     
-    print(f"Feature importance visualizations saved to {output_dir}")
+    print(f"Feature importance analysis completed (some visualizations disabled per requirements)")
     return consolidated
 
 def plot_feature_importance_by_model(importance_results=None, top_n=15):
@@ -207,9 +233,23 @@ def plot_feature_importance_by_model(importance_results=None, top_n=15):
             print("No feature importance data found. Please run feature importance analysis first.")
             return
     
-    # Set up output directory
-    output_dir = settings.VISUALIZATION_DIR / "features"
-    io.ensure_dir(output_dir)
+    # Set up output directories
+    features_dir = settings.VISUALIZATION_DIR / "features"
+    io.ensure_dir(features_dir)
+    
+    # Set up model-specific subdirectories
+    linear_dir = features_dir / "linear"
+    xgboost_dir = features_dir / "xgboost"
+    lightgbm_dir = features_dir / "lightgbm"
+    catboost_dir = features_dir / "catboost"
+    
+    io.ensure_dir(linear_dir)
+    io.ensure_dir(xgboost_dir)
+    io.ensure_dir(lightgbm_dir)
+    io.ensure_dir(catboost_dir)
+    
+    # Use features_dir as the main output directory
+    output_dir = features_dir
     
     # Create individual plots for each model
     for model_name, importance_df in importance_results.items():
@@ -238,7 +278,26 @@ def plot_feature_importance_by_model(importance_results=None, top_n=15):
         ax.axvline(x=0, color='gray', linestyle='--', alpha=0.7)
         
         plt.tight_layout()
-        save_figure(fig, f"{model_name}_top_features", output_dir)
+        
+        # Determine appropriate directory based on model type
+        if model_name.startswith('LR_') or 'ElasticNet' in model_name:
+            # Linear regression and ElasticNet models go to linear directory
+            target_dir = linear_dir
+        elif 'XGB' in model_name:
+            # XGBoost models go to xgboost directory
+            target_dir = xgboost_dir
+        elif 'LightGBM' in model_name:
+            # LightGBM models go to lightgbm directory
+            target_dir = lightgbm_dir
+        elif 'CatBoost' in model_name:
+            # CatBoost models go to catboost directory
+            target_dir = catboost_dir
+        else:
+            # Default to main features directory
+            target_dir = output_dir
+            
+        # Save figure
+        save_figure(fig, f"{model_name}_top_features", target_dir)
     
     print(f"Individual model feature importance plots saved to {output_dir}")
     return importance_results
@@ -275,9 +334,23 @@ def plot_feature_correlations(top_features=None, n_features=20):
                 print("No feature importance data found. Please run feature importance analysis first.")
                 return
     
-    # Set up output directory
-    output_dir = settings.VISUALIZATION_DIR / "features"
-    io.ensure_dir(output_dir)
+    # Set up output directories
+    features_dir = settings.VISUALIZATION_DIR / "features"
+    io.ensure_dir(features_dir)
+    
+    # Set up model-specific subdirectories
+    linear_dir = features_dir / "linear"
+    xgboost_dir = features_dir / "xgboost"
+    lightgbm_dir = features_dir / "lightgbm"
+    catboost_dir = features_dir / "catboost"
+    
+    io.ensure_dir(linear_dir)
+    io.ensure_dir(xgboost_dir)
+    io.ensure_dir(lightgbm_dir)
+    io.ensure_dir(catboost_dir)
+    
+    # Use features_dir as the main output directory
+    output_dir = features_dir
     
     # Load original data
     try:
@@ -296,7 +369,9 @@ def plot_feature_correlations(top_features=None, n_features=20):
     # Calculate correlation matrix
     corr_matrix = feature_df[valid_features].corr()
     
-    # Create heatmap
+    # Create heatmap - DISABLED
+    # The following code has been disabled to prevent generating top_features_correlation.png
+    """
     fig, ax = plt.subplots(figsize=(14, 12))
     
     mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
@@ -309,8 +384,11 @@ def plot_feature_correlations(top_features=None, n_features=20):
     
     plt.tight_layout()
     save_figure(fig, "top_features_correlation", output_dir)
+    """
     
-    # Cluster features by correlation and visualize
+    # Cluster features by correlation and visualize - DISABLED
+    # The following code has been disabled to prevent generating feature_correlation_clustering.png
+    """
     try:
         from scipy.cluster import hierarchy
         from scipy.spatial.distance import squareform
@@ -339,8 +417,9 @@ def plot_feature_correlations(top_features=None, n_features=20):
         
     except:
         print("Could not create feature clustering visualization.")
+    """
     
-    print(f"Feature correlation visualizations saved to {output_dir}")
+    print(f"Feature correlation analysis completed (visualizations disabled)")
     return corr_matrix
 
 if __name__ == "__main__":

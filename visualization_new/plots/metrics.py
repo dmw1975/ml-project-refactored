@@ -79,8 +79,13 @@ class MetricsTable(ComparativeViz):
         # Create table
         table_data = metrics_df[['Model'] + available_metrics].copy()
         
-        # Create figure and axes
-        fig, ax = plt.subplots(figsize=self.config.get('figsize', (12, len(table_data) * 0.5 + 1)))
+        # Create figure with better proportions - calculate proper height based on number of rows
+        # Reduce overall height by using a tighter factor
+        fig_height = max(6, min(20, len(table_data) * 0.3 + 1.5))  # Reduced height
+        fig_width = 14  # Fixed reasonable width
+        
+        # Create figure with minimal margins
+        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
         
         # Hide axes
         ax.axis('off')
@@ -89,7 +94,8 @@ class MetricsTable(ComparativeViz):
         # Get colors for each cell
         colors = []
         
-        # Initialize with white
+        # Initialize with white for standard rows and light gray for header
+        header_color = '#f2f2f2'  # Light gray for header
         for i in range(len(table_data)):
             row_colors = ['white'] * len(table_data.columns)
             colors.append(row_colors)
@@ -109,43 +115,110 @@ class MetricsTable(ComparativeViz):
             elif metric in ['R2']:  # Higher is better
                 best_idx = table_data[metric].idxmax()
                 colors[best_idx][col_idx] = '#d9ead3'  # Light green
+                
+            # Also handle R² if present (legacy format)
+            elif metric == 'R²':  # Higher is better
+                best_idx = table_data[metric].idxmax()
+                colors[best_idx][col_idx] = '#d9ead3'  # Light green
         
-        # Format values as strings
+        # Format values as strings with appropriate precision
         cell_text = []
+        
+        # Calculate ideal column widths - give model names much more space
+        model_name_width = max(len(str(name)) for name in table_data['Model'])
+        
+        # The model column gets 60% of the width, metrics share the remaining 40%
+        col_widths = [0.6]  # Much wider for model names
+        
+        # Calculate width for metric columns - smaller and equal width
+        metric_width = 0.4 / len(available_metrics) 
         
         for i, row in table_data.iterrows():
             row_text = []
             
             for j, val in enumerate(row):
                 if j == 0:  # Model name
+                    # Don't truncate model names since we're giving them more space
                     row_text.append(str(val))
                 else:  # Metric
                     if isinstance(val, (int, float, np.number)):
-                        row_text.append(f"{val:.4f}")
+                        # Use fewer decimal places to save space
+                        row_text.append(f"{val:.3f}")
                     else:
                         row_text.append(str(val))
             
             cell_text.append(row_text)
+            
+            # Add column widths for metric columns (all equal)
+            if i == 0:
+                # Use the calculated metric width for all metric columns
+                for j in range(len(row) - 1):
+                    col_widths.append(metric_width)
         
-        # Create table
+        # Add a title row above the table - by adding a temporary row to cell_text
+        title_row = ['Model Performance Metrics Summary'] + [''] * (len(table_data.columns) - 1)
+        cell_text.insert(0, title_row)
+        
+        # Add a color row for the title (title gets a different background)
+        title_row_colors = ['#d4e6f1'] * len(table_data.columns)  # Light blue for title
+        colors.insert(0, title_row_colors)
+        
+        # Create table with improved formatting - without using colLabels (we'll set them manually)
         table = ax.table(
             cellText=cell_text,
-            colLabels=table_data.columns,
             cellColours=colors,
-            cellLoc='center',
-            loc='center'
+            cellLoc='center',  # Default cell alignment
+            loc='center',
+            colWidths=col_widths
         )
         
-        # Format table
+        # Format table with better appearance
         table.auto_set_font_size(False)
-        table.set_fontsize(10)
-        table.scale(1.2, 1.5)
+        table.set_fontsize(9)  # Slightly smaller font for better readability
         
-        # Set title
-        plt.title('Model Performance Metrics Summary', fontsize=self.config.get('title_fontsize', 16), pad=20)
+        # Set cell properties - title and header rows
+        for (row, col), cell in table.get_celld().items():
+            if row == 0:  # Title row
+                # Make title larger and bold
+                cell.set_text_props(weight='bold', color='black', fontsize=11)
+                
+                # For the first cell (which contains the title)
+                if col == 0:
+                    # Make title span all columns
+                    cell.visible_edges = 'open'  # No borders
+                else:
+                    # Hide all other cells in title row
+                    cell.set_text_props(alpha=0)
+                    cell.visible_edges = 'open'  # No borders
+                    
+            elif row == 1:  # Header row
+                cell.set_text_props(weight='bold', color='black')
+                cell.set_facecolor(header_color)
+                
+                # Set column labels (first row is title, second row is header)
+                if col == 0:
+                    cell.get_text().set_text('Model')
+                    # Also left-align the 'Model' header
+                    cell.get_text().set_horizontalalignment('left')
+                elif col < len(table_data.columns):
+                    cell.get_text().set_text(table_data.columns[col])
+            
+            # Left-align text in the Model column (first column)
+            if col == 0 and row > 0:
+                cell.get_text().set_horizontalalignment('left')
+            
+            # Add borders except for title row
+            if row > 0:
+                cell.set_edgecolor('gray')
         
-        # Adjust layout
-        plt.tight_layout()
+        # Scale table to be more compact and fill the figure appropriately
+        # Use a smaller vertical scale to reduce empty space
+        table.scale(1.0, 1.05)
+        
+        # No separate title needed as it's part of the table
+        
+        # Tighter layout with minimal margins since title is in the table
+        plt.tight_layout(rect=[0.02, 0.02, 0.98, 0.98])
         
         # Save figure if requested
         if self.config.get('save', True):
@@ -163,8 +236,8 @@ class MetricsTable(ComparativeViz):
                 # Import settings
                 from config import settings
                 
-                # Use default from settings
-                output_dir = settings.VISUALIZATION_DIR / "metrics"
+                # Use performance directory instead of metrics
+                output_dir = settings.VISUALIZATION_DIR / "performance"
             
             # Save figure
             save_figure(
@@ -345,17 +418,19 @@ class MetricsComparisonPlot(ComparativeViz):
                 # Import settings
                 from config import settings
                 
-                # Use default from settings
-                output_dir = settings.VISUALIZATION_DIR / "metrics"
+                # Use performance directory instead of metrics
+                output_dir = settings.VISUALIZATION_DIR / "performance"
             
-            # Save figure
-            save_figure(
-                fig=fig,
-                filename="model_metrics_comparison",
-                output_dir=output_dir,
-                dpi=self.config.get('dpi', 300),
-                format=self.config.get('format', 'png')
-            )
+            # Save figure - only if explicitly requested through a config parameter
+            # This prevents the model_metrics_comparison.png file from being created by default
+            if self.config.get('create_model_metrics_plot', False):
+                save_figure(
+                    fig=fig,
+                    filename="model_metrics_comparison",
+                    output_dir=output_dir,
+                    dpi=self.config.get('dpi', 300),
+                    format=self.config.get('format', 'png')
+                )
         
         # Show figure if requested
         if self.config.get('show', False):

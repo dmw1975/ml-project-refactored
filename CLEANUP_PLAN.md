@@ -1,13 +1,16 @@
 # Visualization Code Cleanup Plan
 
-This document outlines the plan to clean up redundant visualization code after implementing the new model-agnostic visualization architecture.
+This document outlines the plan to clean up redundant visualization code after implementing the new model-agnostic visualization architecture, with special attention to directory structure issues and removing unwanted CatBoost_* directories.
 
 ## Goals
 
 1. Remove redundant code to improve maintainability
-2. Reduce confusion by clearly deprecating old modules
-3. Ensure backward compatibility during transition
-4. Provide clear guidelines for using the new architecture
+2. Eliminate CatBoost_* directories while preserving the preferred type-based directory structure
+3. Standardize on the new visualization architecture (`visualization_new`) 
+4. Reduce confusion by clearly deprecating old modules
+5. Ensure backward compatibility during transition
+6. Provide clear guidelines for using the new architecture
+7. Ensure future enhancements only need to be implemented once
 
 ## Phase 1: Deprecation
 
@@ -128,15 +131,101 @@ After a transition period (e.g., 2-3 months):
 2. Remove backward compatibility shims
 3. Update all references in the codebase to use new architecture
 
+## Phase 0: Directory Structure Cleanup (Immediate Priority)
+
+### 1. Fix CatBoost_* Directory Generation
+
+The current issue is in `visualization_new/viz_factory.py` lines 290-291, which creates model-name based directories:
+
+```python
+# Use default from settings
+output_dir = settings.VISUALIZATION_DIR / model_name
+```
+
+This needs to be updated to use type-based directories instead:
+
+```python
+# Add helper function for consistent directory structure
+def get_visualization_dir(model_name, plot_type):
+    """Return standardized directory path for visualizations."""
+    from config import settings
+    # Convert model name to lowercase for consistency
+    return settings.VISUALIZATION_DIR / plot_type / model_name.lower()
+
+# Then use this function for different visualization types:
+residuals_dir = get_visualization_dir(model_name, "residuals")
+features_dir = get_visualization_dir(model_name, "features")
+```
+
+### 2. Modify `visualize_all_models()` Function
+
+In the `visualize_all_models()` function (line 353), change:
+
+```python
+# Current code
+plots = visualize_model(
+    model_data=model_data,
+    output_dir=output_dir / model_name if output_dir else None,
+    format=format,
+    dpi=dpi,
+    show=show
+)
+```
+
+To:
+
+```python
+# Updated code - let visualize_model handle directory structure
+plots = visualize_model(
+    model_data=model_data,
+    output_dir=None,  # Let visualize_model use type-based directories
+    format=format,
+    dpi=dpi,
+    show=show
+)
+```
+
+### 3. Remove Existing CatBoost_* Directories
+
+Create a cleanup script to safely remove CatBoost_* directories:
+
+```python
+import os
+import shutil
+from pathlib import Path
+from config import settings
+
+# Directory to clean
+viz_dir = settings.VISUALIZATION_DIR
+
+# Find all CatBoost_* directories
+catboost_dirs = list(viz_dir.glob("CatBoost_*"))
+
+# Output information
+print(f"Found {len(catboost_dirs)} CatBoost directories to remove:")
+for d in catboost_dirs:
+    print(f" - {d}")
+
+# Ask for confirmation
+if input("Proceed with removal? (y/n): ").lower() == 'y':
+    for d in catboost_dirs:
+        shutil.rmtree(d)
+        print(f"Removed {d}")
+else:
+    print("Operation cancelled.")
+```
+
 ## Implementation Plan
 
-1. Start with adding deprecation warnings
-2. Update main.py and test scripts to use new architecture
-3. Document the transition process
-4. Schedule future removal of deprecated code
+1. Start with fixing directory structure (Phase 0)
+2. Add deprecation warnings to legacy code (Phase 1)
+3. Update main.py and test scripts to use new architecture
+4. Document the transition process
+5. Schedule future removal of deprecated code
 
 ## Timeline
 
+- **Immediate (Day 1-2)**: Implement Phase 0 (Directory Structure Cleanup)
 - **Week 1-2**: Implement Phase 1 (Deprecation)
 - **Week 3-4**: Implement Phase 2 (Cleanup)
 - **Week 4-5**: Implement Phase 3 (Documentation)

@@ -48,8 +48,16 @@ def load_all_models():
         print("No LightGBM models found")
         lightgbm_models = {}
     
+    # Load CatBoost models
+    try:
+        catboost_models = io.load_model("catboost_models.pkl", settings.MODEL_DIR)
+        print(f"Loaded {len(catboost_models)} CatBoost models")
+    except:
+        print("No CatBoost models found")
+        catboost_models = {}
+    
     # Combine all models
-    all_models = {**linear_models, **elastic_models, **xgboost_models, **lightgbm_models}
+    all_models = {**linear_models, **elastic_models, **xgboost_models, **lightgbm_models, **catboost_models}
     
        
     return all_models

@@ -6,38 +6,57 @@ This document provides information about the new visualization architecture impl
 
 The new visualization architecture is designed to be model-agnostic, modular, and extensible. It provides a standardized way to create visualizations for different model types (XGBoost, LightGBM, CatBoost, ElasticNet, etc.) without duplicating code.
 
-## Directory Structure
+## Package Structure
 
 ```
 visualization_new/
 ├── __init__.py
-├── adapters/
+├── adapters/                  # Model-specific adapters
 │   ├── __init__.py
 │   ├── xgboost_adapter.py
 │   ├── lightgbm_adapter.py
 │   └── catboost_adapter.py
-├── core/
+├── core/                      # Core components and interfaces
 │   ├── __init__.py
 │   ├── interfaces.py
 │   ├── base.py
 │   ├── registry.py
 │   └── style.py
-├── plots/
+├── plots/                     # Visualization implementations
 │   ├── __init__.py
 │   ├── residuals.py
 │   ├── features.py
 │   └── metrics.py
-├── components/
+├── components/                # Reusable visualization components
 │   ├── __init__.py
 │   ├── annotations.py
 │   ├── layouts.py
 │   └── formats.py
-├── utils/
+├── utils/                     # Utility functions
 │   ├── __init__.py
 │   ├── data_prep.py
 │   ├── statistics.py
 │   └── io.py
-└── viz_factory.py
+└── viz_factory.py             # Simplified interface for creating visualizations
+```
+
+## Output Directory Structure
+
+The visualization package organizes outputs using a standardized directory structure. For detailed information, see [DIRECTORY_STRUCTURE.md](visualization_new/DIRECTORY_STRUCTURE.md).
+
+```
+/outputs/visualizations/
+├── features/                  # Feature importance visualizations 
+│   ├── catboost/              # CatBoost feature importance plots
+│   ├── lightgbm/              # LightGBM feature importance plots
+│   └── xgboost/               # XGBoost feature importance plots
+├── residuals/                 # Residual analysis visualizations
+│   ├── catboost/              # CatBoost residual plots
+│   └── xgboost/               # XGBoost residual plots
+└── performance/               # Performance metrics visualizations
+    ├── catboost/              # CatBoost performance plots
+    ├── comparison/            # Cross-model comparison plots
+    └── xgboost/               # XGBoost performance plots
 ```
 
 ## Key Components

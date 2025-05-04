@@ -99,6 +99,7 @@ class VisualizationConfig:
             "annotation_fontsize": 10,
             "grid": True,
             "grid_alpha": 0.3,
+            "create_heatmap": None,  # None means auto-detect based on model type
         }
         # Update with provided configuration
         self.config.update(kwargs)

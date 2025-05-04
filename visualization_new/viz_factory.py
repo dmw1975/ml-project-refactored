@@ -1,6 +1,8 @@
 """Visualization factory for easy access to visualization functions."""
 
 from pathlib import Path
+import pandas as pd
+import sys
 from typing import Dict, List, Union, Any, Optional, Tuple
 
 from visualization_new.core.interfaces import ModelData, VisualizationConfig
@@ -9,7 +11,50 @@ from visualization_new.plots.residuals import plot_residuals, plot_all_residuals
 from visualization_new.plots.features import plot_feature_importance, plot_feature_importance_comparison
 from visualization_new.plots.metrics import plot_metrics, plot_metrics_table, plot_model_comparison
 from visualization_new.plots.sectors import plot_sector_performance, plot_sector_metrics_table, visualize_all_sector_plots
+from visualization_new.plots.dataset_comparison import plot_dataset_comparison, create_all_dataset_comparisons
+from visualization_new.plots.statistical_tests import plot_statistical_tests, visualize_statistical_tests
+from visualization_new.plots.optimization import (
+    plot_optimization_history, plot_param_importance, plot_contour,
+    plot_hyperparameter_comparison, plot_basic_vs_optuna, plot_optuna_improvement,
+    plot_all_optimization_visualizations
+)
 from visualization_new.utils.io import load_all_models
+from visualization_new.adapters.elasticnet_adapter import ElasticNetAdapter
+
+
+def get_visualization_dir(model_name: str, plot_type: str) -> Path:
+    """
+    Return standardized directory path for visualizations.
+    
+    Args:
+        model_name: Name of the model
+        plot_type: Type of visualization (features, residuals, performance, etc.)
+        
+    Returns:
+        Path: Path to the visualization directory
+    """
+    # Add project root to path if needed
+    project_root = Path(__file__).parent.parent.absolute()
+    if str(project_root) not in sys.path:
+        sys.path.append(str(project_root))
+        
+    # Import settings
+    from config import settings
+    
+    # For residuals, use the top-level residuals directory without model-specific subdirectories
+    if plot_type == "residuals":
+        output_dir = settings.VISUALIZATION_DIR / plot_type
+    else:
+        # Extract base model type (e.g., "catboost" from "CatBoost_Base_basic")
+        model_type = model_name.lower().split('_')[0]
+        
+        # Create and return the path - using base model type, not full model name
+        output_dir = settings.VISUALIZATION_DIR / plot_type / model_type
+    
+    # Ensure directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    return output_dir
 
 
 def create_residual_plot(
@@ -187,8 +232,8 @@ def create_comparative_dashboard(
     fig, axes = create_grid_layout(
         nrows=2,
         ncols=2,
-        figsize=config.figsize,
-        suptitle=config.title,
+        figsize=config.get("figsize", (16, 12)),
+        suptitle=config.get("title", "Model Performance Dashboard"),
         suptitle_fontsize=16
     )
     
@@ -239,6 +284,228 @@ def create_comparative_dashboard(
     return fig
 
 
+def create_optimization_history_plot(
+    model_data: Union[str, Dict[str, Any], ModelData],
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None
+) -> Optional[str]:
+    """
+    Create optimization history plot for a model.
+    
+    Args:
+        model_data: Model name, data dictionary, or ModelData object
+        config: Visualization configuration
+        
+    Returns:
+        Optional[str]: Path to the saved visualization or None if not saved
+    """
+    # Handle string model name
+    if isinstance(model_data, str):
+        model_data = load_model(model_data)
+    
+    # Get model metadata and study object
+    study = None
+    model_name = None
+    
+    if isinstance(model_data, ModelData):
+        # Use adapter methods
+        model_name = model_data.get_metadata().get('model_name', 'Unknown Model')
+        # Check if the adapter has get_study method
+        if hasattr(model_data, 'get_study'):
+            study = model_data.get_study()
+        # If not, try to get it from raw model data
+        elif hasattr(model_data, 'get_raw_model_data'):
+            raw_data = model_data.get_raw_model_data()
+            study = raw_data.get('study', None)
+    else:
+        # Direct dictionary access
+        model_name = model_data.get('model_name', 'Unknown Model')
+        study = model_data.get('study', None)
+    
+    if study is None:
+        print(f"No optimization study found for {model_name}")
+        return None
+    
+    return plot_optimization_history(study, config, model_name)
+
+
+def create_param_importance_plot(
+    model_data: Union[str, Dict[str, Any], ModelData],
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None
+) -> Optional[str]:
+    """
+    Create parameter importance plot for a model.
+    
+    Args:
+        model_data: Model name, data dictionary, or ModelData object
+        config: Visualization configuration
+        
+    Returns:
+        Optional[str]: Path to the saved visualization or None if not saved
+    """
+    # Handle string model name
+    if isinstance(model_data, str):
+        model_data = load_model(model_data)
+    
+    # Get model metadata and study object
+    study = None
+    model_name = None
+    
+    if isinstance(model_data, ModelData):
+        # Use adapter methods
+        model_name = model_data.get_metadata().get('model_name', 'Unknown Model')
+        # Check if the adapter has get_study method
+        if hasattr(model_data, 'get_study'):
+            study = model_data.get_study()
+        # If not, try to get it from raw model data
+        elif hasattr(model_data, 'get_raw_model_data'):
+            raw_data = model_data.get_raw_model_data()
+            study = raw_data.get('study', None)
+    else:
+        # Direct dictionary access
+        model_name = model_data.get('model_name', 'Unknown Model')
+        study = model_data.get('study', None)
+    
+    if study is None:
+        print(f"No optimization study found for {model_name}")
+        return None
+    
+    return plot_param_importance(study, config, model_name)
+
+
+def create_all_optimization_visualizations(
+    model_data: Union[str, Dict[str, Any], ModelData],
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None
+) -> Dict[str, str]:
+    """
+    Create all optimization-related visualizations for a model.
+    
+    Args:
+        model_data: Model name, data dictionary, or ModelData object
+        config: Visualization configuration
+        
+    Returns:
+        Dict[str, str]: Dictionary of visualization paths
+    """
+    # Handle string model name
+    if isinstance(model_data, str):
+        model_data = load_model(model_data)
+    
+    # Get model metadata and study object
+    study = None
+    model_name = None
+    
+    if isinstance(model_data, ModelData):
+        # Use adapter methods
+        model_name = model_data.get_metadata().get('model_name', 'Unknown Model')
+        # Check if the adapter has get_study method
+        if hasattr(model_data, 'get_study'):
+            study = model_data.get_study()
+        # If not, try to get it from raw model data
+        elif hasattr(model_data, 'get_raw_model_data'):
+            raw_data = model_data.get_raw_model_data()
+            study = raw_data.get('study', None)
+    else:
+        # Direct dictionary access
+        model_name = model_data.get('model_name', 'Unknown Model')
+        study = model_data.get('study', None)
+        
+    # Get raw model data for plot_all_optimization_visualizations
+    raw_data = model_data
+    if isinstance(model_data, ModelData) and hasattr(model_data, 'get_raw_model_data'):
+        raw_data = model_data.get_raw_model_data()
+    
+    return plot_all_optimization_visualizations(raw_data, config)
+
+
+def create_hyperparameter_comparison(
+    models: List[Union[str, Dict[str, Any], ModelData]],
+    parameter_name: str,
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None,
+    model_family: str = "xgboost"
+) -> Optional[str]:
+    """
+    Create hyperparameter comparison plot across models.
+    
+    Args:
+        models: List of model names, data dictionaries, or ModelData objects
+        parameter_name: Name of the hyperparameter to compare
+        config: Visualization configuration
+        model_family: Model family name (xgboost, lightgbm, catboost, elasticnet)
+        
+    Returns:
+        Optional[str]: Path to the saved visualization or None if not saved
+    """
+    # Handle string model names
+    model_list = []
+    for model in models:
+        if isinstance(model, str):
+            model_list.append(load_model(model))
+        elif isinstance(model, ModelData) and hasattr(model, 'get_raw_model_data'):
+            model_list.append(model.get_raw_model_data())
+        else:
+            model_list.append(model)
+    
+    return plot_hyperparameter_comparison(model_list, parameter_name, config, model_family)
+
+
+def create_basic_vs_optuna_comparison(
+    models: List[Union[str, Dict[str, Any], ModelData]],
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None,
+    model_family: str = "xgboost"
+) -> Optional[str]:
+    """
+    Create comparison of basic vs. tuned models.
+    
+    Args:
+        models: List of model names, data dictionaries, or ModelData objects
+        config: Visualization configuration
+        model_family: Model family name (xgboost, lightgbm, catboost, elasticnet)
+        
+    Returns:
+        Optional[str]: Path to the saved visualization or None if not saved
+    """
+    # Handle string model names
+    model_list = []
+    for model in models:
+        if isinstance(model, str):
+            model_list.append(load_model(model))
+        elif isinstance(model, ModelData) and hasattr(model, 'get_raw_model_data'):
+            model_list.append(model.get_raw_model_data())
+        else:
+            model_list.append(model)
+    
+    return plot_basic_vs_optuna(model_list, config, model_family)
+
+
+def create_optuna_improvement_plot(
+    models: List[Union[str, Dict[str, Any], ModelData]],
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None,
+    model_family: str = "xgboost"
+) -> Optional[str]:
+    """
+    Create plot showing improvement from Optuna optimization.
+    
+    Args:
+        models: List of model names, data dictionaries, or ModelData objects
+        config: Visualization configuration
+        model_family: Model family name (xgboost, lightgbm, catboost, elasticnet)
+        
+    Returns:
+        Optional[str]: Path to the saved visualization or None if not saved
+    """
+    # Handle string model names
+    model_list = []
+    for model in models:
+        if isinstance(model, str):
+            model_list.append(load_model(model))
+        elif isinstance(model, ModelData) and hasattr(model, 'get_raw_model_data'):
+            model_list.append(model.get_raw_model_data())
+        else:
+            model_list.append(model)
+    
+    return plot_optuna_improvement(model_list, config, model_family)
+
+
 def visualize_model(
     model_data: Union[str, Dict[str, Any], ModelData],
     output_dir: Optional[Union[str, Path]] = None,
@@ -284,8 +551,27 @@ def visualize_model(
         # Import settings
         from config import settings
         
-        # Use default from settings
-        output_dir = settings.VISUALIZATION_DIR / model_name
+        # Use type-based directory structure instead of model-name based
+        # This avoids creating unwanted directories
+        # Extract model type from model name and use the specific type directory
+        model_type = model_name.lower().split('_')[0]
+        
+        # Map to standard directory names
+        if 'catboost' in model_type:
+            model_dir = 'catboost'
+        elif 'lightgbm' in model_type:
+            model_dir = 'lightgbm'
+        elif 'xgb' in model_type:
+            model_dir = 'xgboost'
+        elif 'elasticnet' in model_type:
+            model_dir = 'elasticnet'
+        elif 'lr' in model_type:
+            model_dir = 'linear'
+        else:
+            # For unknown types, use a concrete type rather than a catch-all "general" folder
+            model_dir = 'other'
+            
+        output_dir = settings.VISUALIZATION_DIR / "performance" / model_dir
     
     # Ensure output directory exists
     output_dir = Path(output_dir)
@@ -304,19 +590,311 @@ def visualize_model(
     
     # Residual plot
     try:
-        residual_fig = create_residual_plot(model_data, config)
-        plots['residual'] = Path(output_dir) / f"{model_name}_residuals.{format}"
+        # Use residuals directory
+        residuals_dir = get_visualization_dir(model_name, "residuals")
+        # Update config with the new directory
+        residual_config = VisualizationConfig(
+            output_dir=residuals_dir,
+            format=format,
+            dpi=dpi,
+            show=show
+        )
+        residual_fig = create_residual_plot(model_data, residual_config)
+        # For CatBoost models, simplify the filename
+        if model_name.lower().startswith('catboost'):
+            # Extract variant like 'base_basic' from 'CatBoost_Base_basic'
+            parts = model_name.split('_', 1)
+            variant = parts[1] if len(parts) > 1 else 'default'
+            plots['residual'] = residuals_dir / f"residuals_{variant.lower()}.{format}"
+        else:
+            plots['residual'] = residuals_dir / f"{model_name.lower()}_residuals.{format}"
     except Exception as e:
         print(f"Error creating residual plot: {e}")
     
     # Feature importance plot
     try:
-        feature_fig = create_feature_importance_plot(model_data, config)
-        plots['feature_importance'] = Path(output_dir) / f"{model_name}_top_features.{format}"
+        # Use features directory
+        features_dir = get_visualization_dir(model_name, "features")
+        # Update config with the new directory
+        feature_config = VisualizationConfig(
+            output_dir=features_dir,
+            format=format,
+            dpi=dpi,
+            show=show
+        )
+        feature_fig = create_feature_importance_plot(model_data, feature_config)
+        # For CatBoost models, simplify the filename
+        if model_name.lower().startswith('catboost'):
+            # Extract variant like 'base_basic' from 'CatBoost_Base_basic'
+            parts = model_name.split('_', 1)
+            variant = parts[1] if len(parts) > 1 else 'default'
+            plots['feature_importance'] = features_dir / f"top_features_{variant.lower()}.{format}"
+        else:
+            plots['feature_importance'] = features_dir / f"{model_name.lower()}_top_features.{format}"
     except Exception as e:
         print(f"Error creating feature importance plot: {e}")
     
+    # Optimization plots (if applicable)
+    if 'optuna' in model_name.lower():
+        try:
+            # Create optimization visualizations
+            optimization_plots = create_all_optimization_visualizations(model_data, config)
+            plots.update(optimization_plots)
+        except Exception as e:
+            print(f"Error creating optimization plots: {e}")
+    
     return plots
+
+
+def create_cross_model_feature_importance_by_dataset(
+    format: str = 'png',
+    dpi: int = 300,
+    show: bool = False
+) -> Dict[str, Path]:
+    """
+    Create feature importance comparisons across all model types, grouped by dataset.
+    
+    This function generates visualizations that show which features are most important
+    across different model types (LightGBM, XGBoost, CatBoost, ElasticNet, etc.) for
+    each dataset type (Base, Yeo, Base_Random, Yeo_Random).
+    
+    Args:
+        format: File format
+        dpi: Dots per inch
+        show: Whether to show plots
+        
+    Returns:
+        Dict[str, Path]: Dictionary of dataset names and file paths
+    """
+    # Set up output directory
+    from config import settings
+    import os
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from matplotlib.colors import LinearSegmentedColormap
+    
+    # Create a dedicated directory for cross-model feature importance
+    output_dir = settings.VISUALIZATION_DIR / "features" / "cross_model_comparison"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load all models
+    all_models = load_all_models()
+    
+    # Group models by dataset
+    dataset_groups = {}
+    
+    # Import ModelFamily for dataset extraction
+    from visualization_new.core.model_family import ModelFamily, get_model_info
+    
+    # Process each model
+    for model_name, model_data in all_models.items():
+        # Add model_name to model_data if not present
+        if 'model_name' not in model_data:
+            model_data['model_name'] = model_name
+            
+        # Extract dataset name
+        family = ModelFamily.from_model_name(model_name)
+        dataset = family.get_dataset_from_model_name(model_name)
+        
+        # Skip unknown datasets
+        if dataset == 'Unknown':
+            continue
+            
+        # Add to dataset groups
+        if dataset not in dataset_groups:
+            dataset_groups[dataset] = []
+        
+        # Create adapter and add to group
+        try:
+            adapter = get_adapter_for_model(model_data)
+            dataset_groups[dataset].append((model_name, adapter))
+        except Exception as e:
+            print(f"Error creating adapter for {model_name}: {e}")
+    
+    # Create feature importance comparison for each dataset group
+    result_paths = {}
+    
+    for dataset, model_adapters in dataset_groups.items():
+        try:
+            if not model_adapters:
+                print(f"No models found for dataset: {dataset}")
+                continue
+            
+            # Create configuration for this dataset
+            dataset_dir = output_dir / dataset.lower()
+            os.makedirs(dataset_dir, exist_ok=True)
+            
+            # Extract feature importance from each model
+            feature_data = {}
+            model_names = []
+            model_types = []
+            all_features = set()
+            
+            # Debug: Log all model adapters in this dataset group
+            print(f"\nProcessing dataset group: {dataset}")
+            print(f"Number of models in this group: {len(model_adapters)}")
+            for i, (model_name, _) in enumerate(model_adapters):
+                print(f"  {i+1}. {model_name}")
+            
+            for model_name, adapter in model_adapters:
+                # Get model info for colors and type
+                info = get_model_info(model_name)
+                model_type = info['family']
+                
+                # Get a simplified model name for display
+                if 'optuna' in model_name.lower():
+                    display_name = f"{model_type} (Tuned)"
+                else:
+                    display_name = f"{model_type} (Basic)"
+                
+                model_names.append(display_name)
+                model_types.append(model_type)
+                
+                # Get feature importance
+                try:
+                    # Debug: Show pre-importance extraction info
+                    print(f"\nProcessing model: {model_name}")
+                    print(f"  Display name: {display_name}")
+                    print(f"  Model type: {model_type}")
+                    
+                    importance_df = adapter.get_feature_importance()
+                    
+                    # Debug: Show importance stats before scaling
+                    print(f"  Original importance values: min={importance_df['Importance'].min()}, max={importance_df['Importance'].max()}, mean={importance_df['Importance'].mean()}")
+                    
+                    # Check model type and apply scaling if needed
+                    # For LinearRegression (with coefficients) or ElasticNet (with small values)
+                    is_elasticnet = isinstance(adapter, ElasticNetAdapter) or 'elasticnet' in model_name.lower()
+                    
+                    # For ElasticNet, we need to scale values to be comparable with tree-based models
+                    if is_elasticnet:
+                        # Scale up ElasticNet importances to be more comparable with other models
+                        # Apply an even higher scale factor for better visibility in the heatmap
+                        # The base adapter already applies a 100x scaling, so this is additional
+                        scale_factor = 100000  # Very high scale factor to ensure visibility
+                        importance_df['Importance'] = importance_df['Importance'] * scale_factor
+                        print(f"  Applied additional scaling factor of {scale_factor} to {model_name}")
+                        print(f"  Scaled importance values: min={importance_df['Importance'].min()}, max={importance_df['Importance'].max()}, mean={importance_df['Importance'].mean()}")
+                        
+                        # Ensure minimum value is not too small - use a minimum importance floor
+                        min_importance = 0.5  # Set minimum importance value
+                        too_small_mask = importance_df['Importance'] < min_importance
+                        if too_small_mask.any():
+                            num_adjusted = too_small_mask.sum()
+                            importance_df.loc[too_small_mask, 'Importance'] = min_importance
+                            print(f"  Adjusted {num_adjusted} values to minimum importance of {min_importance}")
+                            print(f"  Final values: min={importance_df['Importance'].min()}, max={importance_df['Importance'].max()}, mean={importance_df['Importance'].mean()}")
+                    
+                    # Create a dictionary for easier lookup
+                    feature_dict = dict(zip(importance_df['Feature'], importance_df['Importance']))
+                    feature_data[display_name] = feature_dict
+                    all_features.update(importance_df['Feature'])
+                    
+                    # Debug: Confirm model added to feature_data
+                    print(f"  ✓ Added {display_name} to feature_data with {len(feature_dict)} features")
+                except Exception as e:
+                    print(f"  ✗ Error extracting feature importance from {model_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Create consolidated DataFrame
+            all_features_list = list(all_features)
+            df = pd.DataFrame(index=all_features_list)
+            
+            # Add importance for each model
+            for model_name, importance_dict in feature_data.items():
+                df[model_name] = df.index.map(lambda x: importance_dict.get(x, 0))
+            
+            # Add average importance column
+            df['Average Importance'] = df.mean(axis=1)
+            
+            # Sort by average importance
+            df = df.sort_values('Average Importance', ascending=False)
+            
+            # Select top features
+            top_n = 20
+            top_features = df.head(top_n)
+            
+            # Create figure for average importance across models
+            plt.figure(figsize=(14, 10))
+            bars = plt.barh(
+                top_features.index[::-1],  # Reverse to have highest at the top
+                top_features['Average Importance'][::-1],
+                color='#3498db',
+                alpha=0.7
+            )
+            
+            # Add value labels
+            for i, bar in enumerate(bars):
+                width = bar.get_width()
+                plt.text(
+                    width + 0.01,
+                    bar.get_y() + bar.get_height() / 2,
+                    f"{width:.4f}",
+                    va='center',
+                    fontsize=10
+                )
+            
+            # Set plot properties
+            plt.xlabel('Average Importance Across Models', fontsize=12)
+            plt.title(f"Top {top_n} Features by Average Importance - {dataset} Dataset", fontsize=14)
+            plt.grid(axis='x', alpha=0.3)
+            plt.tight_layout()
+            
+            # Save average importance figure
+            avg_importance_path = dataset_dir / f"average_importance_{dataset.lower()}.{format}"
+            plt.savefig(avg_importance_path, dpi=dpi, format=format, bbox_inches='tight')
+            plt.close()
+            
+            # Create heatmap for detailed model comparison
+            plt.figure(figsize=(16, 12))
+            
+            # Drop the Average Importance column for the heatmap
+            heatmap_data = top_features.drop('Average Importance', axis=1)
+            
+            # Create a custom colormap from white to blue
+            cmap = LinearSegmentedColormap.from_list(
+                'WhiteBlue', [(1, 1, 1), (0.2, 0.6, 0.9)], N=100
+            )
+            
+            # Create the heatmap
+            sns.heatmap(
+                heatmap_data,
+                cmap=cmap,
+                annot=True,
+                fmt='.3f',
+                linewidths=0.5
+            )
+            
+            # Set plot properties
+            plt.title(f'Feature Importance Across Model Types - {dataset} Dataset', fontsize=16)
+            plt.xlabel('Model Type', fontsize=14)
+            plt.ylabel('Features', fontsize=14)
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            
+            # Save heatmap figure
+            heatmap_path = dataset_dir / f"feature_importance_heatmap_{dataset.lower()}.{format}"
+            plt.savefig(heatmap_path, dpi=dpi, format=format, bbox_inches='tight')
+            plt.close()
+            
+            # Store the paths
+            result_paths[dataset] = {
+                'average_importance': avg_importance_path,
+                'heatmap': heatmap_path
+            }
+            
+            print(f"Saved cross-model feature importance comparison for {dataset} dataset:")
+            print(f"  - Average importance: {avg_importance_path}")
+            print(f"  - Detailed heatmap: {heatmap_path}")
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Error creating feature importance comparison for dataset {dataset}: {e}")
+    
+    return result_paths
 
 
 def visualize_all_models(
@@ -345,9 +923,10 @@ def visualize_all_models(
     
     for model_name, model_data in all_models.items():
         try:
+            # Let visualize_model handle the directory structure consistently
             plots = visualize_model(
                 model_data=model_data,
-                output_dir=output_dir / model_name if output_dir else None,
+                output_dir=None,  # Let visualize_model use type-based directories
                 format=format,
                 dpi=dpi,
                 show=show
@@ -358,31 +937,13 @@ def visualize_all_models(
     
     # Create comparison plots
     try:
-        # Set up comparison output directory
-        if output_dir is None:
-            # Default output directory
-            from pathlib import Path
-            import sys
-            
-            # Add project root to path if needed
-            project_root = Path(__file__).parent.parent.absolute()
-            if str(project_root) not in sys.path:
-                sys.path.append(str(project_root))
-                
-            # Import settings
-            from config import settings
-            
-            # Use default from settings
-            comparison_dir = settings.VISUALIZATION_DIR / "comparison"
-        else:
-            comparison_dir = Path(output_dir) / "comparison"
-        
-        # Ensure directory exists
-        comparison_dir.mkdir(parents=True, exist_ok=True)
+        # Place comparison plots directly in the performance directory (not in a subdirectory)
+        performance_dir = settings.VISUALIZATION_DIR / "performance"
+        performance_dir.mkdir(parents=True, exist_ok=True)
         
         # Configuration
         config = VisualizationConfig(
-            output_dir=comparison_dir,
+            output_dir=performance_dir,
             format=format,
             dpi=dpi,
             show=show
@@ -391,8 +952,8 @@ def visualize_all_models(
         # Create comparison plots
         model_list = list(all_models.values())
         
-        # Metrics comparison plot
-        metrics_fig = create_model_comparison_plot(model_list, config)
+        # Metrics comparison plot - commented out to prevent creating model_metrics_comparison.png
+        # metrics_fig = create_model_comparison_plot(model_list, config)
         
         # Metrics table
         table_fig = create_metrics_table(model_list, config)
@@ -400,11 +961,13 @@ def visualize_all_models(
         # Feature importance comparison
         feature_fig = create_feature_importance_comparison(model_list, config)
         
-        # Add to plots
+        # Add to plots - use standardized naming and place directly in performance directory
+        # Only include the metrics table, not the model metrics comparison
         model_plots['comparison'] = {
-            'metrics': comparison_dir / f"model_metrics_comparison.{format}",
-            'table': comparison_dir / f"metrics_summary_table.{format}",
-            'feature_importance': comparison_dir / f"top_features_avg_importance.{format}"
+            # Commented out to prevent creating model_metrics_comparison.png
+            # 'metrics': performance_dir / f"comparison_model_metrics.{format}",
+            'table': performance_dir / f"comparison_metrics_table.{format}",
+            'feature_importance': performance_dir / f"comparison_top_features.{format}"
         }
     except Exception as e:
         print(f"Error creating comparison plots: {e}")

@@ -5,6 +5,7 @@ import importlib
 import re
 
 from visualization_new.core.interfaces import ModelData
+from visualization_new.core.model_family import ModelFamilyType, ModelFamily, get_model_info
 
 # Registry of model types to adapter classes
 _ADAPTER_REGISTRY = {}
@@ -54,7 +55,10 @@ def get_adapter_for_model(model_data: Dict[str, Any]) -> ModelData:
         elif 'elasticnet' in name:
             model_type = 'elasticnet'
         elif 'lr_' in name:
-            model_type = 'linear_regression'
+            model_type = 'linearregression'
+            
+        # Print model type for debugging
+        print(f"Detected model type: {model_type} from name: {name}")
     
     # Check model class
     elif 'model' in model_data:
@@ -75,8 +79,13 @@ def get_adapter_for_model(model_data: Dict[str, Any]) -> ModelData:
     if model_type is None:
         raise ValueError(f"Could not determine model type from model data")
     
-    # Convert to lowercase
+    # Convert to lowercase and extract base model type if needed
     model_type = model_type.lower()
+    
+    # If model_type contains spaces or underscores, extract the first part
+    # (e.g., "LightGBM Optuna" -> "lightgbm")
+    if ' ' in model_type:
+        model_type = model_type.split()[0]
     
     # Check if adapter exists for model type
     if model_type in _ADAPTER_REGISTRY:

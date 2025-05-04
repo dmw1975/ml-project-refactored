@@ -142,7 +142,8 @@ def visualize_vif_comparison(base_vif, yeo_vif):
     """
     # Set up style
     style = setup_visualization_style()
-    output_dir = settings.VISUALIZATION_DIR / "features"
+    # Change from features to vif directory for better organization
+    output_dir = settings.VISUALIZATION_DIR / "vif"
     io.ensure_dir(output_dir)
     
     # Create separate VIF plots for Base and Yeo
@@ -152,7 +153,7 @@ def visualize_vif_comparison(base_vif, yeo_vif):
     # Create a combined plot
     create_combined_vif_plot(base_vif, yeo_vif, output_dir)
     
-    print(f"VIF visualization saved to {output_dir}")
+    print(f"VIF visualizations saved to the dedicated VIF directory: {output_dir}")
 
 def create_vif_plot(vif_data, title_suffix, output_dir, top_n=30):
     """

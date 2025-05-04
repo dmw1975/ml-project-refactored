@@ -7,6 +7,13 @@ from typing import Dict, Tuple, List, Optional, Any, Union
 from visualization_new.core.interfaces import ModelData
 from visualization_new.utils.data_prep import prepare_prediction_data, prepare_residuals
 
+# Check if optuna is available
+try:
+    import optuna
+    OPTUNA_AVAILABLE = True
+except ImportError:
+    OPTUNA_AVAILABLE = False
+
 class LightGBMAdapter(ModelData):
     """Adapter for LightGBM models."""
     
@@ -166,3 +173,30 @@ class LightGBMAdapter(ModelData):
                 metadata[key] = self.model_data[key]
         
         return metadata
+        
+    def get_study(self) -> Optional[Any]:
+        """
+        Get the Optuna study object for optimization visualizations.
+        
+        Returns:
+            Optuna study object if available, None otherwise
+        """
+        if not OPTUNA_AVAILABLE:
+            return None
+            
+        # Check if study is available in model data
+        if 'study' in self.model_data:
+            return self.model_data['study']
+            
+        return None
+        
+    def get_raw_model_data(self) -> Dict[str, Any]:
+        """
+        Get the raw model data dictionary.
+        
+        This is useful for accessing any model data that doesn't have a specific getter method.
+        
+        Returns:
+            The raw model data dictionary
+        """
+        return self.model_data
