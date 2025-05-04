@@ -70,6 +70,12 @@ def plot_elasticnet_feature_importance():
                 # Get importance from coefficient magnitudes
                 importance = np.abs(model.coef_)
                 
+                # Apply consistent 100x scaling to match visualization_new implementation
+                base_scale = 100  # Apply a base scaling factor for better visualization
+                importance = importance * base_scale
+                print(f"ElasticNet visualization: Applied base scaling of {base_scale}x to feature importance values")
+                print(f"  Min: {np.min(importance)}, Max: {np.max(importance)}, Mean: {np.mean(importance)}")
+                
                 # Create DataFrame for plotting
                 importance_df = pd.DataFrame({
                     'Feature': feature_names,
@@ -92,7 +98,7 @@ def plot_elasticnet_feature_importance():
                 
                 # Title and labels
                 ax.set_title(f'Feature Importance: {name}', fontsize=14)
-                ax.set_xlabel('Coefficient Magnitude')
+                ax.set_xlabel('Coefficient Magnitude (scaled by 100x)')
                 ax.set_ylabel('Feature')
                 
                 plt.tight_layout()

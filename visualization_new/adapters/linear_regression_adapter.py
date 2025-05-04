@@ -63,6 +63,13 @@ class LinearRegressionAdapter(ModelData):
         
         # Extract feature importance from model coefficients
         importance = np.abs(self.model.coef_)
+        
+        # Apply consistent 100x scaling to match ElasticNet implementation
+        base_scale = 100  # Apply a base scaling factor for better visualization
+        importance = importance * base_scale
+        print(f"LinearRegressionAdapter: Applied base scaling of {base_scale}x to feature importance values")
+        print(f"  Min: {np.min(importance)}, Max: {np.max(importance)}, Mean: {np.mean(importance)}")
+        
         std = np.zeros_like(importance)
         
         # Get feature names

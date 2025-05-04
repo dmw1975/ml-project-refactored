@@ -38,7 +38,7 @@ def plot_elasticnet_comparison():
         lr_models = {}
     
     # Set up output directory
-    output_dir = settings.VISUALIZATION_DIR / "performance/linear"
+    output_dir = settings.VISUALIZATION_DIR / "performance/elasticnet"
     io.ensure_dir(output_dir)
     
     # Extract performance metrics
@@ -211,7 +211,7 @@ def plot_elasticnet_hyperparameters():
         return None
     
     # Set up output directory
-    output_dir = settings.VISUALIZATION_DIR / "performance/linear/hyperparameters"
+    output_dir = settings.VISUALIZATION_DIR / "performance/elasticnet/hyperparameters"
     io.ensure_dir(output_dir)
     
     # 1. Alpha Comparison
@@ -497,7 +497,7 @@ def plot_elasticnet_optimization_history():
         return None
     
     # Set up output directory
-    output_dir = settings.VISUALIZATION_DIR / "performance/linear/optimization"
+    output_dir = settings.VISUALIZATION_DIR / "performance/elasticnet/optimization"
     io.ensure_dir(output_dir)
     
     # Loop through datasets

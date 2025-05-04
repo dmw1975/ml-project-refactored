@@ -63,8 +63,8 @@ def plot_elasticnet_cv_distribution(cv_results=None):
     perf_dir = settings.VISUALIZATION_DIR / "performance"
     io.ensure_dir(perf_dir)
     
-    # Create linear directory for model-specific performance plots
-    output_dir = perf_dir / "linear"
+    # Create elasticnet directory for ElasticNet plots
+    output_dir = perf_dir / "elasticnet"
     io.ensure_dir(output_dir)
     
     # Prepare data for the plot

@@ -48,6 +48,13 @@ def get_visualization_dir(model_name: str, plot_type: str) -> Path:
         # Extract base model type (e.g., "catboost" from "CatBoost_Base_basic")
         model_type = model_name.lower().split('_')[0]
         
+        # Standardize folder names
+        if model_type == 'elasticnet':
+            model_type = 'linear'
+        elif model_type == 'xgb':
+            # Ensure XGBoost always uses xgboost folder
+            model_type = 'xgboost'
+            
         # Create and return the path - using base model type, not full model name
         output_dir = settings.VISUALIZATION_DIR / plot_type / model_type
     
@@ -563,9 +570,8 @@ def visualize_model(
             model_dir = 'lightgbm'
         elif 'xgb' in model_type:
             model_dir = 'xgboost'
-        elif 'elasticnet' in model_type:
-            model_dir = 'elasticnet'
-        elif 'lr' in model_type:
+        elif 'elasticnet' in model_type or 'lr' in model_type:
+            # Route all ElasticNet and Linear Regression models to the linear folder
             model_dir = 'linear'
         else:
             # For unknown types, use a concrete type rather than a catch-all "general" folder
@@ -649,19 +655,22 @@ def visualize_model(
 def create_cross_model_feature_importance_by_dataset(
     format: str = 'png',
     dpi: int = 300,
-    show: bool = False
+    show: bool = False,
+    tree_based_only: bool = True  # New parameter to exclude linear models
 ) -> Dict[str, Path]:
     """
-    Create feature importance comparisons across all model types, grouped by dataset.
+    Create feature importance comparisons across model types, grouped by dataset.
     
     This function generates visualizations that show which features are most important
-    across different model types (LightGBM, XGBoost, CatBoost, ElasticNet, etc.) for
-    each dataset type (Base, Yeo, Base_Random, Yeo_Random).
+    across different model types (LightGBM, XGBoost, CatBoost) for each dataset type 
+    (Base, Yeo, Base_Random, Yeo_Random). By default, only tree-based models are included
+    to ensure consistent and comparable feature importance metrics.
     
     Args:
         format: File format
         dpi: Dots per inch
         show: Whether to show plots
+        tree_based_only: If True, include only tree-based models (XGBoost, LightGBM, CatBoost)
         
     Returns:
         Dict[str, Path]: Dictionary of dataset names and file paths
@@ -693,14 +702,20 @@ def create_cross_model_feature_importance_by_dataset(
         if 'model_name' not in model_data:
             model_data['model_name'] = model_name
             
-        # Extract dataset name
+        # Extract dataset name and model family
         family = ModelFamily.from_model_name(model_name)
         dataset = family.get_dataset_from_model_name(model_name)
+        model_family_type = family.model_type
         
         # Skip unknown datasets
         if dataset == 'Unknown':
             continue
             
+        # Filter out non-tree-based models if requested
+        if tree_based_only and model_family_type not in ['XGBoost', 'LightGBM', 'CatBoost']:
+            print(f"Skipping {model_name} (type: {model_family_type}) - not a tree-based model")
+            continue
+        
         # Add to dataset groups
         if dataset not in dataset_groups:
             dataset_groups[dataset] = []
@@ -758,36 +773,22 @@ def create_cross_model_feature_importance_by_dataset(
                     print(f"  Display name: {display_name}")
                     print(f"  Model type: {model_type}")
                     
+                    # Get raw importance values
                     importance_df = adapter.get_feature_importance()
                     
-                    # Debug: Show importance stats before scaling
+                    # Debug: Show original importance stats
                     print(f"  Original importance values: min={importance_df['Importance'].min()}, max={importance_df['Importance'].max()}, mean={importance_df['Importance'].mean()}")
                     
-                    # Check model type and apply scaling if needed
-                    # For LinearRegression (with coefficients) or ElasticNet (with small values)
-                    is_elasticnet = isinstance(adapter, ElasticNetAdapter) or 'elasticnet' in model_name.lower()
+                    # Convert to rankings instead of raw importance values
+                    # Sort by importance and assign ranks (1 = most important)
+                    importance_df = importance_df.sort_values('Importance', ascending=False).reset_index(drop=True)
+                    importance_df['Rank'] = importance_df.index + 1
                     
-                    # For ElasticNet, we need to scale values to be comparable with tree-based models
-                    if is_elasticnet:
-                        # Scale up ElasticNet importances to be more comparable with other models
-                        # Apply an even higher scale factor for better visibility in the heatmap
-                        # The base adapter already applies a 100x scaling, so this is additional
-                        scale_factor = 100000  # Very high scale factor to ensure visibility
-                        importance_df['Importance'] = importance_df['Importance'] * scale_factor
-                        print(f"  Applied additional scaling factor of {scale_factor} to {model_name}")
-                        print(f"  Scaled importance values: min={importance_df['Importance'].min()}, max={importance_df['Importance'].max()}, mean={importance_df['Importance'].mean()}")
-                        
-                        # Ensure minimum value is not too small - use a minimum importance floor
-                        min_importance = 0.5  # Set minimum importance value
-                        too_small_mask = importance_df['Importance'] < min_importance
-                        if too_small_mask.any():
-                            num_adjusted = too_small_mask.sum()
-                            importance_df.loc[too_small_mask, 'Importance'] = min_importance
-                            print(f"  Adjusted {num_adjusted} values to minimum importance of {min_importance}")
-                            print(f"  Final values: min={importance_df['Importance'].min()}, max={importance_df['Importance'].max()}, mean={importance_df['Importance'].mean()}")
+                    print(f"  Converted to feature rankings (1 = most important)")
+                    print(f"  Top 5 features: {', '.join(importance_df['Feature'].head(5).tolist())}")
                     
-                    # Create a dictionary for easier lookup
-                    feature_dict = dict(zip(importance_df['Feature'], importance_df['Importance']))
+                    # Create a dictionary mapping features to their rank
+                    feature_dict = dict(zip(importance_df['Feature'], importance_df['Rank']))
                     feature_data[display_name] = feature_dict
                     all_features.update(importance_df['Feature'])
                     
@@ -798,96 +799,100 @@ def create_cross_model_feature_importance_by_dataset(
                     import traceback
                     traceback.print_exc()
             
-            # Create consolidated DataFrame
+            # Create consolidated DataFrame for ranks
             all_features_list = list(all_features)
             df = pd.DataFrame(index=all_features_list)
             
-            # Add importance for each model
-            for model_name, importance_dict in feature_data.items():
-                df[model_name] = df.index.map(lambda x: importance_dict.get(x, 0))
+            # Add rank for each model (using a high rank as default for missing features)
+            max_possible_rank = len(all_features) + 1  # One more than total features
+            for model_name, rank_dict in feature_data.items():
+                df[model_name] = df.index.map(lambda x: rank_dict.get(x, max_possible_rank))
             
-            # Add average importance column
-            df['Average Importance'] = df.mean(axis=1)
+            # Add average rank column (lower rank = more important)
+            df['Average Rank'] = df.mean(axis=1)
             
-            # Sort by average importance
-            df = df.sort_values('Average Importance', ascending=False)
+            # Sort by average rank (ascending=True because lower rank = more important)
+            df = df.sort_values('Average Rank')
             
-            # Select top features
+            # Select top features by rank
             top_n = 20
             top_features = df.head(top_n)
             
-            # Create figure for average importance across models
+            # Create figure for average rank across models
             plt.figure(figsize=(14, 10))
             bars = plt.barh(
                 top_features.index[::-1],  # Reverse to have highest at the top
-                top_features['Average Importance'][::-1],
+                top_features['Average Rank'][::-1],
                 color='#3498db',
                 alpha=0.7
             )
             
-            # Add value labels
+            # Add value labels (lower rank is better)
             for i, bar in enumerate(bars):
                 width = bar.get_width()
                 plt.text(
-                    width + 0.01,
+                    width + 0.1,
                     bar.get_y() + bar.get_height() / 2,
-                    f"{width:.4f}",
+                    f"{width:.1f}",
                     va='center',
                     fontsize=10
                 )
             
             # Set plot properties
-            plt.xlabel('Average Importance Across Models', fontsize=12)
-            plt.title(f"Top {top_n} Features by Average Importance - {dataset} Dataset", fontsize=14)
+            plt.xlabel('Average Rank Across Models (lower is better)', fontsize=12)
+            plt.title(f"Top {top_n} Features by Average Rank - {dataset} Dataset (Tree-based Models Only)", fontsize=14)
             plt.grid(axis='x', alpha=0.3)
             plt.tight_layout()
             
-            # Save average importance figure
-            avg_importance_path = dataset_dir / f"average_importance_{dataset.lower()}.{format}"
-            plt.savefig(avg_importance_path, dpi=dpi, format=format, bbox_inches='tight')
+            # Save average rank figure
+            avg_rank_path = dataset_dir / f"average_feature_rank_{dataset.lower()}.{format}"
+            plt.savefig(avg_rank_path, dpi=dpi, format=format, bbox_inches='tight')
             plt.close()
             
-            # Create heatmap for detailed model comparison
+            # Create heatmap for detailed model comparison based on ranks
             plt.figure(figsize=(16, 12))
             
-            # Drop the Average Importance column for the heatmap
-            heatmap_data = top_features.drop('Average Importance', axis=1)
+            # Drop the Average Rank column for the heatmap
+            heatmap_data = top_features.drop('Average Rank', axis=1)
             
-            # Create a custom colormap from white to blue
+            # Create a custom colormap from blue to white
+            # For ranks, darker/more intense color = better rank (lower number)
             cmap = LinearSegmentedColormap.from_list(
-                'WhiteBlue', [(1, 1, 1), (0.2, 0.6, 0.9)], N=100
+                'BlueWhite', [(0.2, 0.6, 0.9), (1, 1, 1)], N=100
             )
             
-            # Create the heatmap
+            # Create the heatmap with rank values (integer format)
             sns.heatmap(
                 heatmap_data,
                 cmap=cmap,
                 annot=True,
-                fmt='.3f',
-                linewidths=0.5
+                fmt='d',  # Integer format for ranks
+                linewidths=0.5,
+                vmin=1,  # Force scale to start at rank 1
+                vmax=min(50, len(all_features))  # Cap at 50 or total features, whichever is smaller
             )
             
             # Set plot properties
-            plt.title(f'Feature Importance Across Model Types - {dataset} Dataset', fontsize=16)
+            plt.title(f'Feature Ranking Across Tree-based Models - {dataset} Dataset (lower is better)', fontsize=16)
             plt.xlabel('Model Type', fontsize=14)
             plt.ylabel('Features', fontsize=14)
             plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
             
             # Save heatmap figure
-            heatmap_path = dataset_dir / f"feature_importance_heatmap_{dataset.lower()}.{format}"
+            heatmap_path = dataset_dir / f"feature_rank_heatmap_{dataset.lower()}.{format}"
             plt.savefig(heatmap_path, dpi=dpi, format=format, bbox_inches='tight')
             plt.close()
             
             # Store the paths
             result_paths[dataset] = {
-                'average_importance': avg_importance_path,
+                'average_rank': avg_rank_path,
                 'heatmap': heatmap_path
             }
             
-            print(f"Saved cross-model feature importance comparison for {dataset} dataset:")
-            print(f"  - Average importance: {avg_importance_path}")
-            print(f"  - Detailed heatmap: {heatmap_path}")
+            print(f"Saved cross-model feature rank comparison for {dataset} dataset:")
+            print(f"  - Average rank: {avg_rank_path}")
+            print(f"  - Rank heatmap: {heatmap_path}")
             
         except Exception as e:
             import traceback
