@@ -28,9 +28,8 @@ for dir_path in [
     MODEL_DIR, 
     METRICS_DIR, 
     FEATURE_IMPORTANCE_DIR, 
-    VISUALIZATION_DIR / "performance", 
+    VISUALIZATION_DIR / "performance",
     VISUALIZATION_DIR / "features",
-    VISUALIZATION_DIR / "summary",
     OUTPUT_DIR / "reports"
 ]:
     os.makedirs(dir_path, exist_ok=True)

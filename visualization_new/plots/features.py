@@ -264,18 +264,29 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                 # Default output directory
                 from pathlib import Path
                 import sys
-                
+
                 # Add project root to path if needed
                 project_root = Path(__file__).parent.parent.parent.absolute()
                 if str(project_root) not in sys.path:
                     sys.path.append(str(project_root))
-                    
+
                 # Import settings
                 from config import settings
-                
-                # Use default from settings
+
+                # Use default from settings - ALWAYS save to main features directory only
                 output_dir = settings.VISUALIZATION_DIR / "features"
-            
+            else:
+                # Check if this is a model-specific subdirectory
+                output_dir_str = str(output_dir).lower()
+                for model_dir in ['catboost', 'lightgbm', 'xgboost', 'elasticnet', 'linear']:
+                    if model_dir in output_dir_str:
+                        # If we're in a model-specific subdirectory, use the parent directory
+                        # to avoid saving top_N_features_avg_importance.png in model subdirectories
+                        from config import settings
+                        output_dir = settings.VISUALIZATION_DIR / "features"
+                        print(f"Redirecting top_{top_n}_features_avg_importance.png to main features directory")
+                        break
+
             # Save figure
             save_figure(
                 fig=fig,
@@ -299,11 +310,8 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                 # Default to True for other models
                 create_heatmap = True
         
-        # Create heatmap if requested
-        if create_heatmap:
-            self._create_heatmap(top_df.drop('avg_importance', axis=1))
-        else:
-            print("Skipping heatmap creation as per configuration")
+        # No longer creating heatmap visualization
+        print("Skipping heatmap creation - this output is no longer needed")
         
         # Show figure if requested
         if self.config.get('show', False):
@@ -369,18 +377,29 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                 # Default output directory
                 from pathlib import Path
                 import sys
-                
+
                 # Add project root to path if needed
                 project_root = Path(__file__).parent.parent.parent.absolute()
                 if str(project_root) not in sys.path:
                     sys.path.append(str(project_root))
-                    
+
                 # Import settings
                 from config import settings
-                
-                # Use default from settings
+
+                # Use default from settings - ALWAYS save to main features directory
                 output_dir = settings.VISUALIZATION_DIR / "features"
-            
+            else:
+                # Check if this is a model-specific subdirectory
+                output_dir_str = str(output_dir).lower()
+                for model_dir in ['catboost', 'lightgbm', 'xgboost', 'elasticnet', 'linear']:
+                    if model_dir in output_dir_str:
+                        # If we're in a model-specific subdirectory, use the parent directory
+                        # to avoid saving top_features_heatmap.png in model subdirectories
+                        from config import settings
+                        output_dir = settings.VISUALIZATION_DIR / "features"
+                        print(f"Redirecting top_features_heatmap.png to main features directory")
+                        break
+
             # Save figure
             save_figure(
                 fig=fig,

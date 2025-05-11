@@ -11,10 +11,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots  # Import make_subplots for improved contour plotting
 from typing import Optional, Dict, Any, List, Union
 
 try:
+    import optuna
     import optuna.visualization as optuna_vis
+    from optuna.trial import TrialState
     OPTUNA_AVAILABLE = True
 except ImportError:
     OPTUNA_AVAILABLE = False
@@ -229,21 +232,177 @@ def plot_contour(
     output_dir = config.get('output_dir')
     os.makedirs(output_dir, exist_ok=True)
     
-    # Create the plot
+    # Always use the improved contour plot for better readability
+    return plot_improved_contour(study, config, model_name)
+
+
+def plot_improved_contour(
+    study, 
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None,
+    model_name: str = "model"
+) -> Optional[str]:
+    """
+    Plot an improved parameter contour plot with better readability.
+    
+    This version:
+    1. Selects only the most important parameter pairs
+    2. Uses a larger figure size
+    3. Improves spacing between subplots
+    4. Creates cleaner visualizations of each parameter pair
+    
+    Args:
+        study: Optuna study object with optimization history
+        config: Visualization configuration
+        model_name: Name of the model for output filename
+    
+    Returns:
+        Path to the saved visualization or None if not saved
+    """
     try:
-        fig = optuna_vis.plot_contour(study)
-        fig.update_layout(
-            title=f'Parameter Contour Plot: {model_name}',
-            template='plotly_white'
+        # Get most important parameters from the study
+        param_importances = optuna.importance.get_param_importances(study)
+        
+        # Select top parameters (up to 5 most important)
+        top_params = list(param_importances.keys())[:5]
+        
+        if len(top_params) < 2:
+            print(f"Not enough parameters in study for {model_name} to create contour plot")
+            return None
+        
+        # Calculate the number of pairs (n choose 2)
+        n_pairs = len(top_params) * (len(top_params) - 1) // 2
+        
+        # Determine grid size - want approximately square grid
+        grid_size = int(np.ceil(np.sqrt(n_pairs)))
+        n_rows = n_pairs // grid_size + (1 if n_pairs % grid_size else 0)
+        n_cols = min(grid_size, n_pairs)
+        
+        # Create figure
+        fig = go.Figure()
+        
+        # Create subplot for each pair of top parameters
+        fig = make_subplots(
+            rows=n_rows, 
+            cols=n_cols,
+            subplot_titles=[f'{p1} vs {p2}' for i, p1 in enumerate(top_params) for p2 in top_params[i+1:]]
         )
         
-        # Save the figure
-        output_path = os.path.join(output_dir, f"{model_name}_optuna_contour.{config.get('format', 'png')}")
-        fig.write_image(output_path, scale=2)
+        # Add contour plots for each pair
+        subplot_idx = 1
+        for i, param_i in enumerate(top_params):
+            for param_j in top_params[i+1:]:
+                # Calculate row and column for this subplot
+                row = (subplot_idx - 1) // n_cols + 1
+                col = (subplot_idx - 1) % n_cols + 1
+                
+                # Extract parameter values from trials
+                param_values_i = []
+                param_values_j = []
+                objective_values = []
+                
+                for trial in study.trials:
+                    if trial.state == TrialState.COMPLETE:
+                        if param_i in trial.params and param_j in trial.params:
+                            param_values_i.append(trial.params[param_i])
+                            param_values_j.append(trial.params[param_j])
+                            objective_values.append(trial.value)
+                
+                # Create scatter plot with color based on objective value
+                scatter = go.Scatter(
+                    x=param_values_i,
+                    y=param_values_j,
+                    mode='markers',
+                    marker=dict(
+                        color=objective_values,
+                        # Use Plasma colorscale which has better contrast than Viridis
+                        colorscale='Plasma',  # Alternative options: 'Jet', 'Rainbow', 'Turbo'
+                        # Add black outline to each dot for better separation
+                        line=dict(width=1, color='rgba(0,0,0,0.5)'),
+                        colorbar=dict(
+                            title='Objective Value',
+                            titleside='right',
+                            thickness=15,
+                            len=0.5,
+                            outlinewidth=1
+                        ) if i == 0 and param_j == top_params[1] else None,
+                        showscale=i == 0 and param_j == top_params[1],
+                        # Increase dot size for better visibility
+                        size=10,
+                        # Add some transparency to see overlapping points
+                        opacity=0.85
+                    ),
+                    showlegend=False
+                )
+                
+                fig.add_trace(scatter, row=row, col=col)
+                
+                # Update axes labels
+                fig.update_xaxes(title_text=param_i, row=row, col=col)
+                fig.update_yaxes(title_text=param_j, row=row, col=col)
+                
+                subplot_idx += 1
+        
+        # Update layout for better readability
+        fig.update_layout(
+            title=f'Parameter Contour Plot: {model_name}',
+            template='plotly_white',
+            height=350 * n_rows + 100,   # Even larger height for more readability
+            width=450 * n_cols,          # Even larger width for more readability
+            font=dict(size=12),          # Keep larger font size
+            margin=dict(l=50, r=50, t=80, b=50),  # Increase margins
+            title_font=dict(size=18),    # Larger title font
+            title_x=0.5,                 # Center title
+            showlegend=False,
+            # Add grid pattern to better separate the plots
+            plot_bgcolor='rgba(240,240,240,0.3)',
+            # Add a subtle border around the entire figure
+            paper_bgcolor='white',
+            # Add annotation highlighting color scale meaning
+            annotations=[
+                dict(
+                    text="Lower values (purple) are better",
+                    x=0.99,
+                    y=0.01,
+                    xref="paper",
+                    yref="paper",
+                    showarrow=False,
+                    font=dict(size=10, color="gray")
+                )
+            ]
+        )
+        
+        # Update all x and y axes to make them more readable
+        fig.update_xaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(220,220,220,0.5)',
+            zeroline=True,
+            zerolinewidth=1,
+            zerolinecolor='rgba(0,0,0,0.2)',
+            title_font=dict(size=11),
+            tickfont=dict(size=10)
+        )
+        
+        fig.update_yaxes(
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(220,220,220,0.5)',
+            zeroline=True,
+            zerolinewidth=1,
+            zerolinecolor='rgba(0,0,0,0.2)',
+            title_font=dict(size=11),
+            tickfont=dict(size=10)
+        )
+        
+        # Save the figure with a simpler, cleaner name
+        output_dir = config.get('output_dir')
+        output_path = os.path.join(output_dir, f"{model_name}_contour.{config.get('format', 'png')}")
+        fig.write_image(output_path, scale=3)  # Higher scale for better resolution
         
         return output_path
+        
     except Exception as e:
-        print(f"Error creating contour plot for {model_name}: {e}")
+        print(f"Error creating improved contour plot for {model_name}: {e}")
         return None
 
 
@@ -601,11 +760,12 @@ def plot_all_optimization_visualizations(
         if param_path:
             output_paths['param_importance'] = param_path
         
-        # Create contour plot
+        # Create contour plot (only the improved version)
         try:
-            contour_path = plot_contour(study, config, model_name)
+            contour_path = plot_improved_contour(study, config, model_name)
             if contour_path:
                 output_paths['contour'] = contour_path
+                print(f"Created contour plot for {model_name} with better visibility")
         except Exception as e:
             print(f"Error creating contour plot for {model_name}: {e}")
     

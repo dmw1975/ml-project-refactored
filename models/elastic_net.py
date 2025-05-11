@@ -97,6 +97,8 @@ def run_elasticnet_model(X_data, y_data, model_name, alpha, l1_ratio,
         'n_companies_test': len(X_test),
         'y_test': y_test,
         'y_pred': y_pred,
+        'feature_names': X_data.columns.tolist(),
+        'X_test': X_test,  # Store test data for sector distribution analysis
         'cv_mse': cv_mse,             # Store if available
         'cv_mse_std': cv_mse_std       # Store if available
     }

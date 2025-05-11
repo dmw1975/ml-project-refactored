@@ -116,14 +116,36 @@ class DatasetModelComparisonPlot(ComparativeViz):
         metrics_df = pd.DataFrame(model_metrics)
         return metrics_df
     
+    def darken_color(self, hex_color, factor=0.7):
+        """
+        Darken a hex color by a factor (lower = darker).
+
+        Args:
+            hex_color: Hex color string (e.g., '#3498db')
+            factor: Factor to darken by (0-1, default 0.7)
+
+        Returns:
+            str: Darkened hex color
+        """
+        import matplotlib.colors as mcolors
+
+        # Convert hex to RGB
+        rgb = mcolors.hex2color(hex_color)
+
+        # Darken
+        darker_rgb = tuple(factor * c for c in rgb)
+
+        # Convert back to hex
+        return mcolors.rgb2hex(darker_rgb)
+
     def plot_dataset_comparison(self, dataset_name: str) -> plt.Figure:
         """
         Create plots showing different metrics for all models on a specific dataset,
         grouped by model family with basic and tuned variants shown side-by-side.
-        
+
         Args:
             dataset_name: Name of the dataset to filter by (e.g., 'Base', 'Yeo')
-            
+
         Returns:
             plt.Figure: Figure object
         """
@@ -137,14 +159,26 @@ class DatasetModelComparisonPlot(ComparativeViz):
             print(f"No models found for dataset {dataset_name}")
             return None
         
-        # Define model families and their colors
+        # Define model families and their colors (using blue palette)
         model_families = ['Linear', 'XGBoost', 'LightGBM', 'CatBoost']
+
+        # Use a single bright blue color as the base, with differentiation only for model types
+        # Brighter blue makes black borders for best models more visible
+        base_color = '#3498db'      # Bright blue
+
+        # Define model type colors
+        model_type_colors = {
+            'basic': base_color,          # Bright blue for basic models
+            'tuned': '#1a5276'            # Darker blue for tuned models
+        }
+
+        # Legacy color mappings (kept for compatibility)
         family_colors = {
-            'Linear': '#9b59b6',   # Purple
-            'XGBoost': '#3498db',  # Blue
-            'LightGBM': '#2ecc71', # Green
-            'CatBoost': '#e74c3c', # Red
-            'Unknown': '#95a5a6'   # Gray
+            'Linear': base_color,    # Blue
+            'XGBoost': base_color,   # Blue
+            'LightGBM': base_color,  # Blue
+            'CatBoost': base_color,  # Blue
+            'Unknown': '#d4e6f1'    # Very light blue
         }
         
         # Create figure with 2x2 grid
@@ -202,9 +236,8 @@ class DatasetModelComparisonPlot(ComparativeViz):
                         tuned_model.iloc[0][metric_name] if has_tuned else 0
                     ])
                     
-                    # Add colors
-                    color = family_colors.get(family, family_colors['Unknown'])
-                    bar_colors.extend([color, color])
+                    # Use model type colors - brighter for basic, darker for tuned
+                    bar_colors.extend([model_type_colors['basic'], model_type_colors['tuned']])
                     
                     # Labels
                     x_labels.extend(['', ''])
@@ -215,16 +248,16 @@ class DatasetModelComparisonPlot(ComparativeViz):
                     # Only basic model exists
                     x_positions.append(pair_center)
                     bar_values.append(basic_model.iloc[0][metric_name])
-                    color = family_colors.get(family, family_colors['Unknown'])
-                    bar_colors.append(color)
+                    # Use basic model color
+                    bar_colors.append(model_type_colors['basic'])
                     x_labels.append('')
                     pair_center += family_gap + 1
                 elif has_tuned:
                     # Only tuned model exists
                     x_positions.append(pair_center)
                     bar_values.append(tuned_model.iloc[0][metric_name])
-                    color = family_colors.get(family, family_colors['Unknown'])
-                    bar_colors.append(color)
+                    # Use tuned model color (darker blue)
+                    bar_colors.append(model_type_colors['tuned'])
                     x_labels.append('')
                     pair_center += family_gap + 1
             
@@ -237,11 +270,11 @@ class DatasetModelComparisonPlot(ComparativeViz):
                 ax.text(bar.get_x() + bar.get_width()/2, height + 0.01,
                        f'{value:.4f}', ha='center', va='bottom', fontsize=9)
                 
-                # Highlight the best model
+                # Highlight the best model with light green border
                 if (metric['best'] == 'min' and value == best_fn(bar_values)) or \
                    (metric['best'] == 'max' and value == best_fn(bar_values)):
-                    bar.set_edgecolor('black')
-                    bar.set_linewidth(2)
+                    bar.set_edgecolor('#2ecc71')  # Light green color
+                    bar.set_linewidth(3)  # Slightly thicker border for better visibility
             
             # Add family labels below x-axis
             family_positions = []
@@ -259,19 +292,24 @@ class DatasetModelComparisonPlot(ComparativeViz):
             ax.set_xticks(family_positions)
             ax.set_xticklabels(shown_families, fontsize=12)
             
-            # Add a legend for basic vs tuned
-            basic_patch = plt.Rectangle((0, 0), 1, 1, fc='none', ec='none', label='Basic')
-            tuned_patch = plt.Rectangle((0, 0), 1, 1, fc='none', ec='none', label='Tuned')
+            # Add a legend for model types
             legend_elements = [
-                plt.Rectangle((0, 0), 1, 1, fc='none', ec='none', label=' '),
-                plt.Rectangle((0, 0), 1, 1, fc='none', ec='black', linewidth=2, label='Best Model')
+                # Model type colors
+                plt.Rectangle((0, 0), 1, 1, fc=model_type_colors['basic'], ec='none', label='Basic Model'),
+                plt.Rectangle((0, 0), 1, 1, fc=model_type_colors['tuned'], ec='none', label='Tuned Model (darker blue)'),
+                # Best model indicator
+                plt.Rectangle((0, 0), 1, 1, fc='none', ec='#2ecc71', linewidth=3, label='Best Model (green border)')
             ]
             
             # Add shapes to indicate basic/tuned positioning
-            ax.annotate('Basic', xy=(family_positions[0] - bar_width/2, -0.05), 
+            ax.annotate('Basic', xy=(family_positions[0] - bar_width/2, -0.05),
                        xycoords=('data', 'axes fraction'), ha='center', fontsize=10)
-            ax.annotate('Tuned', xy=(family_positions[0] + bar_width/2, -0.05), 
+            ax.annotate('Tuned', xy=(family_positions[0] + bar_width/2, -0.05),
                        xycoords=('data', 'axes fraction'), ha='center', fontsize=10)
+
+            # Add legend to the plot
+            if metric_name == 'RMSE':  # Only add legend to the first subplot
+                ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
             
             # Set other axes properties
             ax.set_title(f'{metric["title"]} - {dataset_name} Dataset', fontsize=14)
@@ -288,11 +326,12 @@ class DatasetModelComparisonPlot(ComparativeViz):
         # Add overall title
         plt.suptitle(f'Model Performance Metrics on {dataset_name} Dataset', fontsize=16, y=0.98)
         
-        # Add explanation
-        plt.figtext(0.5, 0.01, 
+        # Add explanation with color scheme information
+        plt.figtext(0.5, 0.01,
                    "Models are grouped by family with basic and tuned variants side-by-side.\n"
-                   "Linear: Basic=Linear Regression, Tuned=ElasticNet | Other models: Basic=Default params, Tuned=Optuna optimized", 
-                   ha='center', fontsize=12)
+                   "Linear: Basic=Linear Regression, Tuned=ElasticNet | Other models: Basic=Default params, Tuned=Optuna optimized\n"
+                   "Color scheme: Bright blue=Basic models, Dark blue=Tuned models, Green border=Best model",
+                   ha='center', fontsize=10)
         
         # Adjust layout
         plt.tight_layout(rect=[0, 0.03, 1, 0.96])

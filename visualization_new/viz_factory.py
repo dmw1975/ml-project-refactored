@@ -46,16 +46,25 @@ def get_visualization_dir(model_name: str, plot_type: str) -> Path:
         output_dir = settings.VISUALIZATION_DIR / plot_type
     else:
         # Extract base model type (e.g., "catboost" from "CatBoost_Base_basic")
-        model_type = model_name.lower().split('_')[0]
-        
-        # Standardize folder names
-        if model_type == 'elasticnet':
-            model_type = 'linear'
-        elif model_type == 'xgb':
-            # Ensure XGBoost always uses xgboost folder
+        # Handle model name format for various models consistently
+        if "xgb" in model_name.lower():
+            # All XGBoost models go to xgboost folder
             model_type = 'xgboost'
-            
-        # Create and return the path - using base model type, not full model name
+        elif "lightgbm" in model_name.lower():
+            model_type = 'lightgbm'
+        elif "catboost" in model_name.lower():
+            model_type = 'catboost'
+        elif "elasticnet" in model_name.lower():
+            # All ElasticNet models go to elasticnet folder
+            model_type = 'elasticnet'
+        elif "lr_" in model_name.lower():
+            # Linear Regression models also go to elasticnet folder for consistency
+            model_type = 'elasticnet'
+        else:
+            # For any other model, use the first part of the name
+            model_type = model_name.lower().split('_')[0]
+
+        # Create and return the path - using standardized model type, not raw model name
         output_dir = settings.VISUALIZATION_DIR / plot_type / model_type
     
     # Ensure directory exists
@@ -683,8 +692,9 @@ def create_cross_model_feature_importance_by_dataset(
     import seaborn as sns
     from matplotlib.colors import LinearSegmentedColormap
     
-    # Create a dedicated directory for cross-model feature importance
-    output_dir = settings.VISUALIZATION_DIR / "features" / "cross_model_comparison"
+    # Create a dedicated directory for cross-model feature importance - directly in features dir
+    # No longer using subdirectory "cross_model_comparison" to avoid empty directories
+    output_dir = settings.VISUALIZATION_DIR / "features"
     os.makedirs(output_dir, exist_ok=True)
     
     # Load all models
@@ -736,9 +746,9 @@ def create_cross_model_feature_importance_by_dataset(
                 print(f"No models found for dataset: {dataset}")
                 continue
             
-            # Create configuration for this dataset
-            dataset_dir = output_dir / dataset.lower()
-            os.makedirs(dataset_dir, exist_ok=True)
+            # Don't create dataset-specific subdirectories as they're often empty
+            # Instead, use a naming convention in the main features directory
+            dataset_dir = output_dir
             
             # Extract feature importance from each model
             feature_data = {}

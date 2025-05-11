@@ -274,6 +274,7 @@ def optimize_lgb_with_optuna(X, y, dataset_name, n_trials=50):
         'feature_name_mapping': feature_name_mapping,
         'cleaned_feature_names': cleaned_feature_names,
         'X_test_clean': X_test_clean,  # Store the cleaned test data for importance calculation
+        'X_test': X_test,  # Store original test data with sector information for distribution analysis
         'model_type': 'LightGBM Optuna',
         'study': study  # Include study object for potential further analysis
     }

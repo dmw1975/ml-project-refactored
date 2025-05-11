@@ -48,10 +48,13 @@ def generate_elasticnet_cv_plots():
     # Set up main output directory
     perf_dir = settings.VISUALIZATION_DIR / "performance"
     io.ensure_dir(perf_dir)
-    
-    # Create elasticnet directory for ElasticNet-specific plots
+
+    # Create elasticnet directory for model-specific performance plots
     elasticnet_dir = perf_dir / "elasticnet"
     io.ensure_dir(elasticnet_dir)
+
+    # No longer creating a hyperparameters subdirectory
+    # This keeps all plots directly in the elasticnet directory
     
     # 1. CV RMSE Distribution Plot
     # Prepare data for the plot
@@ -109,9 +112,9 @@ def generate_elasticnet_cv_plots():
     
     plt.tight_layout()
     
-    # Save to elasticnet directory only
+    # Save only to elasticnet directory
     save_figure(fig, "elasticnet_cv_rmse_distribution", elasticnet_dir)
-    
+
     print(f"ElasticNet CV distribution plot saved to {elasticnet_dir}")
     
     # 2. Best Parameters Plot
@@ -170,9 +173,9 @@ def generate_elasticnet_cv_plots():
     
     plt.tight_layout()
     
-    # Save to elasticnet directory only
+    # Save only to elasticnet directory
     save_figure(fig, "elasticnet_best_parameters", elasticnet_dir)
-    
+
     print(f"ElasticNet best parameters plot saved to {elasticnet_dir}")
     
     return True

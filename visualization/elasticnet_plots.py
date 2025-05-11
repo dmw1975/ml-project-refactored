@@ -43,9 +43,9 @@ def plot_elasticnet_feature_importance():
     
     # Set up output directories
     features_dir = settings.VISUALIZATION_DIR / "features"
-    linear_dir = features_dir / "linear"
+    elasticnet_dir = features_dir / "elasticnet"
     io.ensure_dir(features_dir)
-    io.ensure_dir(linear_dir)
+    io.ensure_dir(elasticnet_dir)
     
     # Plot feature importance for each model
     for name, model_data in elasticnet_models.items():
@@ -106,8 +106,8 @@ def plot_elasticnet_feature_importance():
                 # Create filename - only save model_filename to be consistent with other models
                 model_filename = f"{name}_top_features"
                 
-                # Save directly to the linear directory only
-                save_figure(fig, model_filename, linear_dir)
+                # Save directly to the elasticnet directory only
+                save_figure(fig, model_filename, elasticnet_dir)
                 
                 print(f"Feature importance plot saved for {name}")
                 plt.close(fig)

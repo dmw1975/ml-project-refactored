@@ -55,12 +55,12 @@ def plot_top_features(importance_results=None, top_n=20):
     io.ensure_dir(features_dir)
     
     # Set up model-specific subdirectories
-    linear_dir = features_dir / "linear"
+    elasticnet_dir = features_dir / "elasticnet"
     xgboost_dir = features_dir / "xgboost"
     lightgbm_dir = features_dir / "lightgbm"
     catboost_dir = features_dir / "catboost"
     
-    io.ensure_dir(linear_dir)
+    io.ensure_dir(elasticnet_dir)
     io.ensure_dir(xgboost_dir)
     io.ensure_dir(lightgbm_dir)
     io.ensure_dir(catboost_dir)
@@ -238,12 +238,12 @@ def plot_feature_importance_by_model(importance_results=None, top_n=15):
     io.ensure_dir(features_dir)
     
     # Set up model-specific subdirectories
-    linear_dir = features_dir / "linear"
+    elasticnet_dir = features_dir / "elasticnet"
     xgboost_dir = features_dir / "xgboost"
     lightgbm_dir = features_dir / "lightgbm"
     catboost_dir = features_dir / "catboost"
     
-    io.ensure_dir(linear_dir)
+    io.ensure_dir(elasticnet_dir)
     io.ensure_dir(xgboost_dir)
     io.ensure_dir(lightgbm_dir)
     io.ensure_dir(catboost_dir)
@@ -281,8 +281,8 @@ def plot_feature_importance_by_model(importance_results=None, top_n=15):
         
         # Determine appropriate directory based on model type
         if model_name.startswith('LR_') or 'ElasticNet' in model_name:
-            # Linear regression and ElasticNet models go to linear directory
-            target_dir = linear_dir
+            # Linear regression and ElasticNet models go to elasticnet directory
+            target_dir = elasticnet_dir
         elif 'XGB' in model_name:
             # XGBoost models go to xgboost directory
             target_dir = xgboost_dir
@@ -339,12 +339,12 @@ def plot_feature_correlations(top_features=None, n_features=20):
     io.ensure_dir(features_dir)
     
     # Set up model-specific subdirectories
-    linear_dir = features_dir / "linear"
+    elasticnet_dir = features_dir / "elasticnet"
     xgboost_dir = features_dir / "xgboost"
     lightgbm_dir = features_dir / "lightgbm"
     catboost_dir = features_dir / "catboost"
     
-    io.ensure_dir(linear_dir)
+    io.ensure_dir(elasticnet_dir)
     io.ensure_dir(xgboost_dir)
     io.ensure_dir(lightgbm_dir)
     io.ensure_dir(catboost_dir)

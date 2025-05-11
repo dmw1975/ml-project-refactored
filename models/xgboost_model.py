@@ -189,6 +189,8 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
         'y_test': y_test,
         'y_pred': y_pred,
         'n_features': X.shape[1],
+        'feature_names': X.columns.tolist(),
+        'X_test': X_test,  # Store test data for sector distribution analysis
         'model_type': 'XGBoost Optuna',
         'study': study  # Include study object for potential further analysis
     }

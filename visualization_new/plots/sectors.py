@@ -4,11 +4,19 @@ This module provides topic-based visualizations for sector models,
 using the new model-agnostic visualization architecture.
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Add project root to the path so Python can find the modules
+project_root = Path(__file__).parent.parent.parent.absolute()
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
 from typing import Dict, Any, Optional, Union, List, Tuple
 
 from visualization_new.core.interfaces import ModelData, VisualizationConfig
