@@ -128,3 +128,4 @@ catboost==1.2.7
 optuna==4.1.0
 plotly==5.24.1  # For Optuna visualization
 kaleido==0.2.1  # For exporting Plotly figures to images
+shap==0.44.1    # For model interpretability visualizations
