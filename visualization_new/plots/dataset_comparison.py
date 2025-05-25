@@ -35,6 +35,12 @@ class DatasetModelComparisonPlot(ComparativeViz):
         model_adapters = []
         for model_data in models:
             if not isinstance(model_data, ModelData):
+                # If model_data is a dict and doesn't have model_name, 
+                # try to get it from the models dict
+                if isinstance(model_data, dict) and 'model_name' not in model_data:
+                    # This won't work for models passed as list, but will help 
+                    # when called with dict
+                    model_data = model_data.copy()  # Don't modify original
                 model_adapters.append(get_adapter_for_model(model_data))
             else:
                 model_adapters.append(model_data)
@@ -63,6 +69,7 @@ class DatasetModelComparisonPlot(ComparativeViz):
                 continue
             
             # Determine dataset type
+            # Handle both old and new naming patterns
             if 'Base_Random' in model_name:
                 dataset = 'Base_Random'
             elif 'Base' in model_name:
@@ -81,7 +88,7 @@ class DatasetModelComparisonPlot(ComparativeViz):
             elif model_name.startswith('ElasticNet_'):
                 model_family = 'Linear'
                 tuned = True
-            elif 'XGB' in model_name:
+            elif 'XGBoost' in model_name or 'XGB' in model_name:
                 model_family = 'XGBoost'
                 tuned = 'optuna' in model_name
             elif 'LightGBM' in model_name:
@@ -301,11 +308,12 @@ class DatasetModelComparisonPlot(ComparativeViz):
                 plt.Rectangle((0, 0), 1, 1, fc='none', ec='#2ecc71', linewidth=3, label='Best Model (green border)')
             ]
             
-            # Add shapes to indicate basic/tuned positioning
-            ax.annotate('Basic', xy=(family_positions[0] - bar_width/2, -0.05),
-                       xycoords=('data', 'axes fraction'), ha='center', fontsize=10)
-            ax.annotate('Tuned', xy=(family_positions[0] + bar_width/2, -0.05),
-                       xycoords=('data', 'axes fraction'), ha='center', fontsize=10)
+            # Add shapes to indicate basic/tuned positioning (only if we have models)
+            if family_positions:  # Only add annotations if we have at least one model family
+                ax.annotate('Basic', xy=(family_positions[0] - bar_width/2, -0.05),
+                           xycoords=('data', 'axes fraction'), ha='center', fontsize=10)
+                ax.annotate('Tuned', xy=(family_positions[0] + bar_width/2, -0.05),
+                           xycoords=('data', 'axes fraction'), ha='center', fontsize=10)
 
             # Add legend to the plot
             if metric_name == 'RMSE':  # Only add legend to the first subplot
@@ -316,12 +324,13 @@ class DatasetModelComparisonPlot(ComparativeViz):
             ax.set_ylabel(metric['ylabel'], fontsize=12)
             ax.grid(axis='y', alpha=0.3)
             
-            # Set reasonable ylim
-            if metric['best'] == 'min':
-                ax.set_ylim(0, best_fn(bar_values) * 1.5)
-            else:
-                # For R², we want a more specific range (usually 0 to 1)
-                ax.set_ylim(max(0, min(bar_values) - 0.1), min(1.0, max(bar_values) + 0.1))
+            # Set reasonable ylim (only if we have values)
+            if bar_values:
+                if metric['best'] == 'min':
+                    ax.set_ylim(0, best_fn(bar_values) * 1.5)
+                else:
+                    # For R², we want a more specific range (usually 0 to 1)
+                    ax.set_ylim(max(0, min(bar_values) - 0.1), min(1.0, max(bar_values) + 0.1))
         
         # Add overall title
         plt.suptitle(f'Model Performance Metrics on {dataset_name} Dataset', fontsize=16, y=0.98)
@@ -428,7 +437,14 @@ def create_all_dataset_comparisons(
     """
     # Load all models
     all_models = load_all_models()
-    model_list = list(all_models.values())
+    
+    # Add model names to the model data if missing
+    model_list = []
+    for model_name, model_data in all_models.items():
+        model_data_copy = model_data.copy()
+        if 'model_name' not in model_data_copy:
+            model_data_copy['model_name'] = model_name
+        model_list.append(model_data_copy)
     
     # Create comparison
     return plot_dataset_comparison(model_list, config)

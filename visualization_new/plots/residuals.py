@@ -46,6 +46,9 @@ class ResidualPlot(ModelViz):
         Returns:
             matplotlib.figure.Figure: The created figure
         """
+        # Close any existing figures to avoid conflicts
+        plt.close('all')
+        
         # Get prediction data
         y_true, y_pred = self.model_data.get_predictions()
         residuals = self.model_data.get_residuals()

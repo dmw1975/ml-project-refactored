@@ -1,0 +1,79 @@
+{
+  "archive_timestamp": "2025-05-25T20:13:49.116416",
+  "source_directory": "/mnt/d/ml_project_refactored/outputs",
+  "archive_directory": "/mnt/d/ml_project_refactored/outputs_pre_amendment_20250525_201156",
+  "statistics": {
+    "total_files": 3604,
+    "total_dirs": 377,
+    "total_size": 1655591283,
+    "file_types": {
+      ".csv": 93,
+      ".pkl": 44,
+      ".md": 12,
+      ".png": 3421,
+      ".txt": 26,
+      ".json": 2,
+      ".pdf": 2,
+      ".html": 4
+    },
+    "subdirectories": [
+      "feature_importance",
+      "metrics",
+      "models",
+      "reports",
+      "visualizations",
+      "visualizations_archive_20250503_125555",
+      "visualizations_archive_20250503_195315",
+      "visualizations_archive_20250504_101808",
+      "visualizations_archive_20250504_143219",
+      "visualizations_archive_20250504_192110",
+      "visualizations_archive_20250511_145042",
+      "visualizations_archive_20250517_154951",
+      "visualizations_archive_20250518_143455",
+      "visualizations_archive_20250520_192333",
+      "visualizations_archive_20250521_160506",
+      "visualizations_archive_20250522_181910",
+      "visualizations_archive_20250523_231138",
+      "visualizations_archive_20250525_200557",
+      "visualizations_archive_20250525_201056",
+      "visualizations_backup"
+    ]
+  },
+  "statistics_formatted": {
+    "total_size": "1.54 GB",
+    "total_files": 3604,
+    "total_directories": 377,
+    "file_types": {
+      ".csv": 93,
+      ".pkl": 44,
+      ".md": 12,
+      ".png": 3421,
+      ".txt": 26,
+      ".json": 2,
+      ".pdf": 2,
+      ".html": 4
+    },
+    "subdirectories": [
+      "feature_importance",
+      "metrics",
+      "models",
+      "reports",
+      "visualizations",
+      "visualizations_archive_20250503_125555",
+      "visualizations_archive_20250503_195315",
+      "visualizations_archive_20250504_101808",
+      "visualizations_archive_20250504_143219",
+      "visualizations_archive_20250504_192110",
+      "visualizations_archive_20250511_145042",
+      "visualizations_archive_20250517_154951",
+      "visualizations_archive_20250518_143455",
+      "visualizations_archive_20250520_192333",
+      "visualizations_archive_20250521_160506",
+      "visualizations_archive_20250522_181910",
+      "visualizations_archive_20250523_231138",
+      "visualizations_archive_20250525_200557",
+      "visualizations_archive_20250525_201056",
+      "visualizations_backup"
+    ]
+  }
+}

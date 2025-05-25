@@ -101,6 +101,10 @@ def analyze_feature_importance(all_models=None):
     
     # For each model, store its feature set
     for model_name, model_data in all_models.items():
+        # Skip if model_data is not a dictionary (e.g., raw Booster objects)
+        if not isinstance(model_data, dict):
+            print(f"WARNING: Skipping {model_name} in feature importance - not in expected dictionary format")
+            continue
         model = model_data['model']
         if hasattr(model, 'feature_names_in_'):
             trained_feature_sets[model_name] = model.feature_names_in_
@@ -110,6 +114,10 @@ def analyze_feature_importance(all_models=None):
     random_feature_stats = []
     
     for model_name, model_data in all_models.items():
+        # Skip if model_data is not a dictionary (e.g., raw Booster objects)
+        if not isinstance(model_data, dict):
+            continue
+            
         print(f"Calculating feature importance for {model_name}...")
         
         # Get the model

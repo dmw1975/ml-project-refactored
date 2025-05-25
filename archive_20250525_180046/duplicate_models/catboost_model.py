@@ -2,8 +2,8 @@
 
 import numpy as np
 import pandas as pd
-from catboost import CatBoostRegressor, Pool
-from sklearn.model_selection import train_test_split, KFold
+from catboost import CatBoostRegressor
+from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import optuna
 import sys
@@ -14,11 +14,9 @@ project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
 from config import settings
-from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+from data_tree_models import get_tree_model_datasets, perform_stratified_split_for_tree_models
 from utils import io
-from models.linear_regression import perform_stratified_split_by_sector
-
-import os
+# Removed - using tree model specific stratified split
 
 # Cleanup old results
 def cleanup_old_results():
@@ -43,20 +41,8 @@ def train_basic_catboost(X, y, dataset_name):
     """Train a basic CatBoost model with default parameters, ensuring sector columns exist."""
     print(f"\n--- Training Basic CatBoost on {dataset_name} ---")
 
-    # Check and ensure sector columns exist
-    sector_cols = [col for col in X.columns if col.startswith('gics_sector_')]
-    if not sector_cols:
-        print("Warning: No sector columns found in X, adding them from full feature data...")
-        full_features = load_features_data()
-        sector_cols = [col for col in full_features.columns if col.startswith('gics_sector_')]
-
-        for col in sector_cols:
-            if col not in X.columns:
-                X[col] = full_features[col]
-        print(f"Added {len(sector_cols)} sector columns back to dataset.")
-
-    # Now safe to stratify
-    X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
+    # Use tree model specific stratified split
+    X_train, X_test, y_train, y_test = perform_stratified_split_for_tree_models(
         X, y, test_size=settings.CATBOOST_PARAMS.get('test_size', 0.2), 
         random_state=settings.CATBOOST_PARAMS.get('random_state', 42)
     )
@@ -194,7 +180,7 @@ def optimize_catboost_with_optuna(X, y, dataset_name, n_trials=50):
     print(f"Best CV MSE: {mean_cv_mse:.4f} ± {std_cv_mse:.4f}")
     
     # Train final model with best parameters
-    X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
+    X_train, X_test, y_train, y_test = perform_stratified_split_for_tree_models(
         X, y, test_size=settings.CATBOOST_PARAMS.get('test_size', 0.2),
         random_state=settings.CATBOOST_PARAMS.get('random_state', 42)
     )
@@ -250,71 +236,15 @@ def train_catboost_models(datasets=None, n_trials=settings.CATBOOST_PARAMS.get('
     """
     Train and optimize CatBoost models for all datasets.
     """
-    print("Loading data...")
-    feature_df = load_features_data()
-    score_df = load_scores_data()
-    
-    # Get feature sets
-    LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
-    
-    # IMPORTANT: Verify and ensure all expected Yeo features are included
-    # Check if the loaded yeo_columns pickle file has features that aren't in the LR_Yeo DataFrame
-    with open("data/pkl/yeo_columns.pkl", 'rb') as f:
-        import pickle
-        expected_yeo_columns = pickle.load(f)
-    
-    # Count how many features we have vs how many we should have
-    print(f"Expected Yeo columns from pickle: {len(expected_yeo_columns)}")
-    print(f"Actual Yeo columns in DataFrame: {len(LR_Yeo.columns)}")
-    
-    # Check for missing columns and add them if available in the feature_df
-    missing_yeo_cols = [col for col in expected_yeo_columns if col not in LR_Yeo.columns]
-    if missing_yeo_cols:
-        print(f"Warning: {len(missing_yeo_cols)} columns from yeo_columns pickle are missing in LR_Yeo dataset")
-        print(f"First few missing: {missing_yeo_cols[:5] if len(missing_yeo_cols) > 5 else missing_yeo_cols}")
-        
-        # Add missing columns if they exist in the feature dataframe
-        # Create a copy first to avoid SettingWithCopyWarning
-        LR_Yeo = LR_Yeo.copy()
-        
-        # Create a dictionary of columns to add for better performance
-        columns_to_add = {}
-        added_cols = 0
-        
-        for col in missing_yeo_cols:
-            if col in feature_df.columns:
-                columns_to_add[col] = feature_df[col]
-                added_cols += 1
-        
-        # Add all columns at once (much more efficient)
-        if added_cols > 0:
-            LR_Yeo = pd.concat([LR_Yeo, pd.DataFrame(columns_to_add)], axis=1)
-            print(f"Added {added_cols} missing columns to LR_Yeo dataset")
-    
-    # Find sector columns
-    sector_columns = [col for col in feature_df.columns if col.startswith('gics_sector_')]
-    print(f"Sector columns found: {sector_columns}")
-
-    # Add random features
-    LR_Base_random = add_random_feature(LR_Base)
-    LR_Yeo_random = add_random_feature(LR_Yeo)
-    
-    # Ensure random datasets also contain sector columns
-    for sector_col in sector_columns:
-        if sector_col not in LR_Base_random.columns:
-            LR_Base_random[sector_col] = feature_df[sector_col]
-        if sector_col not in LR_Yeo_random.columns:
-            LR_Yeo_random[sector_col] = feature_df[sector_col]
-    
-    # Target variable
-    y = score_df
+    print("Loading tree model data...")
+    datasets_dict, y = get_tree_model_datasets()
     
     # Define all available datasets
     all_datasets = [
-        {'data': LR_Base, 'name': 'CatBoost_Base'},
-        {'data': LR_Yeo, 'name': 'CatBoost_Yeo'},
-        {'data': LR_Base_random, 'name': 'CatBoost_Base_Random'},
-        {'data': LR_Yeo_random, 'name': 'CatBoost_Yeo_Random'}
+        {'data': datasets_dict['Base'], 'name': 'CatBoost_Base'},
+        {'data': datasets_dict['Yeo'], 'name': 'CatBoost_Yeo'},
+        {'data': datasets_dict['Base_Random'], 'name': 'CatBoost_Base_Random'},
+        {'data': datasets_dict['Yeo_Random'], 'name': 'CatBoost_Yeo_Random'}
     ]
     
     # Filter datasets if specified

@@ -31,10 +31,10 @@ class CatBoostAdapter(ModelData):
     def get_predictions(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get test set predictions and actual values."""
         y_test = self.model_data.get('y_test')
-        y_pred = self.model_data.get('y_pred')
+        y_pred = self.model_data.get('y_pred') or self.model_data.get('y_test_pred')
         
         if y_test is None or y_pred is None:
-            raise ValueError(f"Missing y_test or y_pred in model data for {self.model_name}")
+            raise ValueError(f"Missing y_test or y_pred/y_test_pred in model data for {self.model_name}")
         
         # Standardize and return
         return prepare_prediction_data(y_test, y_pred)
@@ -104,9 +104,22 @@ class CatBoostAdapter(ModelData):
         """Get model performance metrics."""
         metrics = {}
         
-        # Copy standard metrics from model data
+        # Check for CatBoost-specific metric keys
+        catboost_mapping = {
+            'test_mse': 'MSE',
+            'test_mae': 'MAE',
+            'test_r2': 'R2',
+            'test_rmse': 'RMSE'
+        }
+        
+        # First try CatBoost-specific keys
+        for cb_key, std_key in catboost_mapping.items():
+            if cb_key in self.model_data:
+                metrics[std_key] = float(self.model_data[cb_key])
+        
+        # Then check standard metrics from model data
         for metric in ['RMSE', 'MAE', 'MSE', 'R2']:
-            if metric in self.model_data:
+            if metric in self.model_data and metric not in metrics:
                 metrics[metric] = self.model_data[metric]
         
         # Calculate any missing metrics
@@ -116,16 +129,27 @@ class CatBoostAdapter(ModelData):
         if 'MSE' not in metrics and 'RMSE' in metrics:
             metrics['MSE'] = metrics['RMSE'] ** 2
             
-        if 'R2' not in metrics or 'MAE' not in metrics:
-            y_test, y_pred = self.get_predictions()
-            
-            if 'R2' not in metrics:
-                from sklearn.metrics import r2_score
-                metrics['R2'] = r2_score(y_test, y_pred)
+        # If still missing key metrics, calculate from predictions
+        if 'R2' not in metrics or 'MAE' not in metrics or 'RMSE' not in metrics:
+            try:
+                y_test, y_pred = self.get_predictions()
                 
-            if 'MAE' not in metrics:
-                from sklearn.metrics import mean_absolute_error
-                metrics['MAE'] = mean_absolute_error(y_test, y_pred)
+                if 'R2' not in metrics:
+                    from sklearn.metrics import r2_score
+                    metrics['R2'] = r2_score(y_test, y_pred)
+                    
+                if 'MAE' not in metrics:
+                    from sklearn.metrics import mean_absolute_error
+                    metrics['MAE'] = mean_absolute_error(y_test, y_pred)
+                    
+                if 'RMSE' not in metrics:
+                    from sklearn.metrics import mean_squared_error
+                    metrics['RMSE'] = np.sqrt(mean_squared_error(y_test, y_pred))
+                    
+                if 'MSE' not in metrics:
+                    metrics['MSE'] = metrics['RMSE'] ** 2
+            except Exception as e:
+                print(f"Warning: Could not calculate metrics for {self.model_name}: {e}")
         
         return metrics
     

@@ -61,8 +61,9 @@ def get_visualization_dir(model_name: str, plot_type: str) -> Path:
             # Linear Regression models also go to elasticnet folder for consistency
             model_type = 'elasticnet'
         else:
-            # For any other model, use the first part of the name
-            model_type = model_name.lower().split('_')[0]
+            # For any other model, skip directory creation to avoid unwanted folders
+            print(f"Warning: Unknown model type for '{model_name}' - skipping directory creation")
+            return None
 
         # Create and return the path - using standardized model type, not raw model name
         output_dir = settings.VISUALIZATION_DIR / plot_type / model_type
@@ -542,6 +543,10 @@ def visualize_model(
     Returns:
         Dict[str, Path]: Dictionary of plot types and file paths
     """
+    # Close any existing figures to avoid conflicts
+    import matplotlib.pyplot as plt
+    plt.close('all')
+    
     # Handle string model name
     if isinstance(model_data, str):
         model_data = load_model(model_data)
@@ -580,11 +585,12 @@ def visualize_model(
         elif 'xgb' in model_type:
             model_dir = 'xgboost'
         elif 'elasticnet' in model_type or 'lr' in model_type:
-            # Route all ElasticNet and Linear Regression models to the linear folder
-            model_dir = 'linear'
+            # Route all ElasticNet and Linear Regression models to the elasticnet folder
+            model_dir = 'elasticnet'
         else:
-            # For unknown types, use a concrete type rather than a catch-all "general" folder
-            model_dir = 'other'
+            # Skip creating directories for unknown types
+            print(f"Warning: Unknown model type '{model_type}' - skipping visualization")
+            return {}
             
         output_dir = settings.VISUALIZATION_DIR / "performance" / model_dir
     
@@ -607,22 +613,23 @@ def visualize_model(
     try:
         # Use residuals directory
         residuals_dir = get_visualization_dir(model_name, "residuals")
-        # Update config with the new directory
-        residual_config = VisualizationConfig(
-            output_dir=residuals_dir,
-            format=format,
-            dpi=dpi,
-            show=show
-        )
-        residual_fig = create_residual_plot(model_data, residual_config)
-        # For CatBoost models, simplify the filename
-        if model_name.lower().startswith('catboost'):
-            # Extract variant like 'base_basic' from 'CatBoost_Base_basic'
-            parts = model_name.split('_', 1)
-            variant = parts[1] if len(parts) > 1 else 'default'
-            plots['residual'] = residuals_dir / f"residuals_{variant.lower()}.{format}"
-        else:
-            plots['residual'] = residuals_dir / f"{model_name.lower()}_residuals.{format}"
+        if residuals_dir is not None:
+            # Update config with the new directory
+            residual_config = VisualizationConfig(
+                output_dir=residuals_dir,
+                format=format,
+                dpi=dpi,
+                show=show
+            )
+            residual_fig = create_residual_plot(model_data, residual_config)
+            # For CatBoost models, simplify the filename
+            if model_name.lower().startswith('catboost'):
+                # Extract variant like 'base_basic' from 'CatBoost_Base_basic'
+                parts = model_name.split('_', 1)
+                variant = parts[1] if len(parts) > 1 else 'default'
+                plots['residual'] = residuals_dir / f"residuals_{variant.lower()}.{format}"
+            else:
+                plots['residual'] = residuals_dir / f"{model_name.lower()}_residuals.{format}"
     except Exception as e:
         print(f"Error creating residual plot: {e}")
     
@@ -630,22 +637,23 @@ def visualize_model(
     try:
         # Use features directory
         features_dir = get_visualization_dir(model_name, "features")
-        # Update config with the new directory
-        feature_config = VisualizationConfig(
-            output_dir=features_dir,
-            format=format,
-            dpi=dpi,
-            show=show
-        )
-        feature_fig = create_feature_importance_plot(model_data, feature_config)
-        # For CatBoost models, simplify the filename
-        if model_name.lower().startswith('catboost'):
-            # Extract variant like 'base_basic' from 'CatBoost_Base_basic'
-            parts = model_name.split('_', 1)
-            variant = parts[1] if len(parts) > 1 else 'default'
-            plots['feature_importance'] = features_dir / f"top_features_{variant.lower()}.{format}"
-        else:
-            plots['feature_importance'] = features_dir / f"{model_name.lower()}_top_features.{format}"
+        if features_dir is not None:
+            # Update config with the new directory
+            feature_config = VisualizationConfig(
+                output_dir=features_dir,
+                format=format,
+                dpi=dpi,
+                show=show
+            )
+            feature_fig = create_feature_importance_plot(model_data, feature_config)
+            # For CatBoost models, simplify the filename
+            if model_name.lower().startswith('catboost'):
+                # Extract variant like 'base_basic' from 'CatBoost_Base_basic'
+                parts = model_name.split('_', 1)
+                variant = parts[1] if len(parts) > 1 else 'default'
+                plots['feature_importance'] = features_dir / f"top_features_{variant.lower()}.{format}"
+            else:
+                plots['feature_importance'] = features_dir / f"{model_name.lower()}_top_features.{format}"
     except Exception as e:
         print(f"Error creating feature importance plot: {e}")
     

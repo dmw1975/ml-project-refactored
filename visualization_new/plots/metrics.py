@@ -49,6 +49,8 @@ class MetricsTable(ComparativeViz):
         Returns:
             matplotlib.figure.Figure: The created figure
         """
+        # Close any existing figures to avoid conflicts
+        plt.close('all')
         # Get metrics for each model
         metrics_data = []
         

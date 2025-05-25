@@ -350,8 +350,16 @@ def create_shap_force_plots(shap_values_dict, shap_dir):
                 shap_values = shap_data['shap_values'][idx]
                 
             # Convert to matplotlib plot
+            # Handle None base_value case (common with LightGBM)
+            base_value = shap_data['expected_value']
+            if base_value is None:
+                # Calculate base value as mean prediction
+                base_value = np.mean(shap_data['model'].predict(shap_data['X_sample']))
+            elif isinstance(base_value, list):
+                base_value = base_value[0]
+            
             force_plot = shap.force_plot(
-                base_value=shap_data['expected_value'] if not isinstance(shap_data['expected_value'], list) else shap_data['expected_value'][0],
+                base_value=base_value,
                 shap_values=shap_values,
                 features=shap_data['X_sample'].iloc[idx],
                 feature_names=shap_data['feature_names'],

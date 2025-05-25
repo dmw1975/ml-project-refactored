@@ -58,8 +58,10 @@ class LightGBMAdapter(ModelData):
             if not isinstance(importance_df, pd.DataFrame):
                 raise ValueError(f"Feature importance is not a DataFrame for {self.model_name}")
             
-            # Ensure required columns
-            if 'Feature' not in importance_df.columns or 'Importance' not in importance_df.columns:
+            # Ensure required columns - handle both capitalized and lowercase
+            if 'feature' in importance_df.columns and 'Feature' not in importance_df.columns:
+                importance_df = importance_df.rename(columns={'feature': 'Feature', 'importance': 'Importance'})
+            elif 'Feature' not in importance_df.columns or 'Importance' not in importance_df.columns:
                 raise ValueError(f"Feature importance DataFrame missing required columns for {self.model_name}")
             
             # Add Std column if missing
@@ -109,10 +111,32 @@ class LightGBMAdapter(ModelData):
         """Get model performance metrics."""
         metrics = {}
         
-        # Copy standard metrics from model data
-        for metric in ['RMSE', 'MAE', 'MSE', 'R2']:
-            if metric in self.model_data:
-                metrics[metric] = self.model_data[metric]
+        # Check if metrics are stored in a 'metrics' dict (LightGBM format)
+        if 'metrics' in self.model_data and isinstance(self.model_data['metrics'], dict):
+            model_metrics = self.model_data['metrics']
+            # Map LightGBM metric names to standard names
+            metric_mapping = {
+                'test_rmse': 'RMSE',
+                'test_mae': 'MAE',
+                'test_r2': 'R2',
+                'test_mse': 'MSE'
+            }
+            for lgb_key, std_key in metric_mapping.items():
+                if lgb_key in model_metrics:
+                    metrics[std_key] = float(model_metrics[lgb_key])
+            
+            # Calculate MSE if not present but RMSE is
+            if 'MSE' not in metrics and 'RMSE' in metrics:
+                metrics['MSE'] = metrics['RMSE'] ** 2
+        else:
+            # Fallback: Copy standard metrics from model data
+            for metric in ['RMSE', 'MAE', 'MSE', 'R2']:
+                if metric in self.model_data:
+                    metrics[metric] = self.model_data[metric]
+            
+            # Check for test_score as R2
+            if 'R2' not in metrics and 'test_score' in self.model_data:
+                metrics['R2'] = self.model_data['test_score']
         
         # Calculate any missing metrics
         if 'RMSE' not in metrics and 'MSE' in metrics:
@@ -121,16 +145,27 @@ class LightGBMAdapter(ModelData):
         if 'MSE' not in metrics and 'RMSE' in metrics:
             metrics['MSE'] = metrics['RMSE'] ** 2
             
-        if 'R2' not in metrics or 'MAE' not in metrics:
-            y_test, y_pred = self.get_predictions()
-            
-            if 'R2' not in metrics:
-                from sklearn.metrics import r2_score
-                metrics['R2'] = r2_score(y_test, y_pred)
+        # If still missing key metrics, calculate from predictions
+        if 'R2' not in metrics or 'MAE' not in metrics or 'RMSE' not in metrics:
+            try:
+                y_test, y_pred = self.get_predictions()
                 
-            if 'MAE' not in metrics:
-                from sklearn.metrics import mean_absolute_error
-                metrics['MAE'] = mean_absolute_error(y_test, y_pred)
+                if 'R2' not in metrics:
+                    from sklearn.metrics import r2_score
+                    metrics['R2'] = r2_score(y_test, y_pred)
+                    
+                if 'MAE' not in metrics:
+                    from sklearn.metrics import mean_absolute_error
+                    metrics['MAE'] = mean_absolute_error(y_test, y_pred)
+                    
+                if 'RMSE' not in metrics:
+                    from sklearn.metrics import mean_squared_error
+                    metrics['RMSE'] = np.sqrt(mean_squared_error(y_test, y_pred))
+                    
+                if 'MSE' not in metrics:
+                    metrics['MSE'] = metrics['RMSE'] ** 2
+            except Exception as e:
+                print(f"Warning: Could not calculate metrics for {self.model_name}: {e}")
         
         return metrics
     

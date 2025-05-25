@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import KFold
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import optuna
 import sys
@@ -14,11 +14,9 @@ project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
 from config import settings
-from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+from data_tree_models import get_tree_model_datasets, perform_stratified_split_for_tree_models
 from utils import io
-from models.linear_regression import perform_stratified_split_by_sector
-
-import os
+# Removed - using tree model specific stratified split
 
 # Cleanup old results
 def cleanup_old_results():
@@ -43,25 +41,16 @@ def train_basic_xgb(X, y, dataset_name):
     """Train a basic XGBoost model with default parameters, ensuring sector columns exist."""
     print(f"\n--- Training Basic XGBoost on {dataset_name} ---")
 
-    # 🔵 Check and ensure sector columns exist
-    sector_cols = [col for col in X.columns if col.startswith('gics_sector_')]
-    if not sector_cols:
-        print("Warning: No sector columns found in X, adding them from full feature data...")
-        full_features = load_features_data()
-        sector_cols = [col for col in full_features.columns if col.startswith('gics_sector_')]
-
-        for col in sector_cols:
-            if col not in X.columns:
-                X[col] = full_features[col]
-        print(f"Added {len(sector_cols)} sector columns back to dataset.")
-
-    # Now safe to stratify
-    X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
+    # Use tree model specific stratified split
+    X_train, X_test, y_train, y_test = perform_stratified_split_for_tree_models(
         X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2), 
         random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
     )
     
-    model = XGBRegressor(random_state=settings.XGBOOST_PARAMS.get('random_state', 42))
+    model = XGBRegressor(
+        random_state=settings.XGBOOST_PARAMS.get('random_state', 42),
+        enable_categorical=True
+    )
     model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
     
@@ -120,7 +109,7 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
             X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
             y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
             
-            model = XGBRegressor(**params)
+            model = XGBRegressor(**params, enable_categorical=True)
             model.fit(X_train, y_train)
             y_pred = model.predict(X_val)
             mse = mean_squared_error(y_val, y_pred)
@@ -151,12 +140,12 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
     print(f"Best CV MSE: {mean_cv_mse:.4f} ± {std_cv_mse:.4f}")
     
     # Train final model with best parameters
-    X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
+    X_train, X_test, y_train, y_test = perform_stratified_split_for_tree_models(
         X, y, test_size=settings.XGBOOST_PARAMS.get('test_size', 0.2),
         random_state=settings.XGBOOST_PARAMS.get('random_state', 42)
     )
 
-    best_model = XGBRegressor(**best_params)
+    best_model = XGBRegressor(**best_params, enable_categorical=True)
     best_model.fit(X_train, y_train)
     y_pred = best_model.predict(X_test)
     
@@ -196,75 +185,44 @@ def optimize_xgb_with_optuna(X, y, dataset_name, n_trials=50):
     }
 
 
-def train_xgboost_models(datasets=None, n_trials=50):
+def train_xgboost_models(datasets=None, n_trials=50, force_retune=False):
     """
     Train and optimize XGBoost models for all datasets.
+    
+    Args:
+        datasets: List of dataset names to train on
+        n_trials: Number of Optuna trials for hyperparameter optimization
+        force_retune: If True, skip existing study checks and retrain
     """
-    print("Loading data...")
-    feature_df = load_features_data()
-    score_df = load_scores_data()
-    
-    # Get feature sets
-    LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
-    
-    # IMPORTANT: Verify and ensure all expected Yeo features are included
-    # Check if the loaded yeo_columns pickle file has features that aren't in the LR_Yeo DataFrame
-    with open("data/pkl/yeo_columns.pkl", 'rb') as f:
-        import pickle
-        expected_yeo_columns = pickle.load(f)
-    
-    # Count how many features we have vs how many we should have
-    print(f"Expected Yeo columns from pickle: {len(expected_yeo_columns)}")
-    print(f"Actual Yeo columns in DataFrame: {len(LR_Yeo.columns)}")
-    
-    # Check for missing columns and add them if available in the feature_df
-    missing_yeo_cols = [col for col in expected_yeo_columns if col not in LR_Yeo.columns]
-    if missing_yeo_cols:
-        print(f"Warning: {len(missing_yeo_cols)} columns from yeo_columns pickle are missing in LR_Yeo dataset")
-        print(f"First few missing: {missing_yeo_cols[:5] if len(missing_yeo_cols) > 5 else missing_yeo_cols}")
+    # Check for existing studies unless force_retune is True
+    if not force_retune:
+        from utils.io import check_existing_studies_for_algorithm, prompt_study_override
         
-        # Add missing columns if they exist in the feature dataframe
-        # Create a copy first to avoid SettingWithCopyWarning
-        LR_Yeo = LR_Yeo.copy()
-        
-        # Create a dictionary of columns to add for better performance
-        columns_to_add = {}
-        added_cols = 0
-        
-        for col in missing_yeo_cols:
-            if col in feature_df.columns:
-                columns_to_add[col] = feature_df[col]
-                added_cols += 1
-        
-        # Add all columns at once (much more efficient)
-        if added_cols > 0:
-            LR_Yeo = pd.concat([LR_Yeo, pd.DataFrame(columns_to_add)], axis=1)
-            print(f"Added {added_cols} missing columns to LR_Yeo dataset")
+        existing_studies = check_existing_studies_for_algorithm('xgboost', datasets, n_trials)
+        if existing_studies:
+            print(f"\n⚠️  Found {len(existing_studies)} existing XGBoost studies.")
+            print("💡 Use force_retune=True parameter to override.")
+            
+            # Show brief summary
+            for model_name, study_info in existing_studies.items():
+                print(f"   - {model_name}: {study_info['n_trials']} trials, RMSE: {study_info['best_value']:.4f}")
+            
+            # Load and return existing models instead of retraining
+            from utils.io import load_model
+            existing_models = load_model("xgboost_models.pkl", settings.MODEL_DIR)
+            if existing_models:
+                print("✅ Returning existing XGBoost models.")
+                return existing_models
     
-    # Find sector columns
-    sector_columns = [col for col in feature_df.columns if col.startswith('gics_sector_')]
-    print(f"Sector columns found: {sector_columns}")
-
-    # Add random features
-    LR_Base_random = add_random_feature(LR_Base)
-    LR_Yeo_random = add_random_feature(LR_Yeo)
-    
-    # 🔵 Ensure random datasets also contain sector columns
-    for sector_col in sector_columns:
-        if sector_col not in LR_Base_random.columns:
-            LR_Base_random[sector_col] = feature_df[sector_col]
-        if sector_col not in LR_Yeo_random.columns:
-            LR_Yeo_random[sector_col] = feature_df[sector_col]
-    
-    # Target variable
-    y = score_df
+    print("Loading tree model data...")
+    datasets_dict, y = get_tree_model_datasets()
     
     # Define all available datasets
     all_datasets = [
-        {'data': LR_Base, 'name': 'XGB_Base'},
-        {'data': LR_Yeo, 'name': 'XGB_Yeo'},
-        {'data': LR_Base_random, 'name': 'XGB_Base_Random'},
-        {'data': LR_Yeo_random, 'name': 'XGB_Yeo_Random'}
+        {'data': datasets_dict['Base'], 'name': 'XGB_Base'},
+        {'data': datasets_dict['Yeo'], 'name': 'XGB_Yeo'},
+        {'data': datasets_dict['Base_Random'], 'name': 'XGB_Base_Random'},
+        {'data': datasets_dict['Yeo_Random'], 'name': 'XGB_Yeo_Random'}
     ]
     
     # Filter datasets if specified

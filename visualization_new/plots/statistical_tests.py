@@ -196,6 +196,9 @@ class StatisticalTestsPlot(ComparativeViz):
         # Create custom colormap for p-values (white to red)
         cmap = LinearSegmentedColormap.from_list('pvalue_cmap', ['white', '#ffcccc', '#ff9999', '#ff6666', '#ff3333', '#ff0000'])
         
+        # Close any existing figures to avoid conflicts
+        plt.close('all')
+        
         # Set up figure with gridspec to support annotations
         fig = plt.figure(figsize=(12, 10))
         gs = GridSpec(1, 1, figure=fig)
@@ -278,39 +281,27 @@ class StatisticalTestsPlot(ComparativeViz):
                     transform=cbar.ax.transAxes, fontsize=8, backgroundcolor='white', 
                     bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=1))
         
-        # Add p-value annotations with significance indicators and better model
+        # Add only directional arrows for significant differences
         for i in range(n_models):
             for j in range(n_models):
                 if i != j:  # Skip diagonal
-                    p_val = p_matrix[i, j]
                     is_significant = sig_matrix[i, j]
                     
-                    # Format p-value without the "p" prefix
-                    if p_val < 0.001:
-                        p_text = "<0.001"
-                    elif p_val < 0.01:
-                        p_text = f"{p_val:.3f}"
-                    else:
-                        p_text = f"{p_val:.2f}"
-                    
-                    # Determine text color based on background and significance
+                    # Determine text color based on background
                     text_color = 'white' if log_p[i, j] > 2.5 else 'black'
                     
-                    # Add arrow to indicate better model (larger and bolder)
-                    arrow = ""
+                    # Add arrow to indicate better model (only for significant differences)
                     if is_significant:
                         better = better_matrix[i, j]
                         # Use larger arrows with unicode symbols
-                        arrow = " ⬆" if better == all_models[i] else " ⬇"
-                    
-                    # Full text to display
-                    cell_text = f"{p_text}{arrow}"
-                    
-                    # Add text with proper formatting - no bold text for better space utilization
-                    ax.text(j, i, cell_text, 
-                           ha='center', va='center', 
-                           color=text_color, 
-                           fontsize=9)
+                        arrow = "⬆" if better == all_models[i] else "⬇"
+                        
+                        # Add the arrow with proper formatting
+                        ax.text(j, i, arrow, 
+                               ha='center', va='center', 
+                               color=text_color, 
+                               fontsize=12, 
+                               fontweight='bold')
         
         # Set title based on dataset filter, including Holm-Bonferroni mention
         if dataset_filter:
@@ -322,7 +313,7 @@ class StatisticalTestsPlot(ComparativeViz):
         
         # Add improved legend with Holm-Bonferroni mention
         fig.text(0.5, 0.01, 
-                 "Values in cells are p-values • Black borders indicate significant differences after Holm-Bonferroni correction\n"
+                 "Cell color intensity shows p-value strength • Black borders indicate significant differences after Holm-Bonferroni correction\n"
                  "⬆ = Row model better than column model, ⬇ = Column model better than row model", 
                  ha='center', fontsize=10)
         
@@ -393,6 +384,9 @@ class StatisticalTestsPlot(ComparativeViz):
             'Linear': '#9b59b6',
             'Unknown': '#95a5a6'
         }
+        
+        # Close any existing figures to avoid conflicts
+        plt.close('all')
         
         # Create a plot with grouped bars
         fig, ax = plt.subplots(figsize=(14, 8))
@@ -537,8 +531,8 @@ class StatisticalTestsPlot(ComparativeViz):
                     format=self.config.get('format', 'png')
                 )
         
-        # Dataset-specific matrices
-        datasets = ['Base', 'Base_Random', 'Yeo', 'Yeo_Random']
+        # Dataset-specific matrices (only Base and Yeo - reduced from previous set)
+        datasets = ['Base', 'Yeo']  # Removed 'Base_Random' and 'Yeo_Random' for cleaner output
         for dataset in datasets:
             print(f"Creating significance matrix for {dataset} dataset...")
             dataset_matrix = self.plot_significance_matrix(dataset_filter=dataset)
@@ -602,7 +596,8 @@ def plot_statistical_tests(
 
 def visualize_statistical_tests(
     tests_file: Optional[Union[str, Path]] = None,
-    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None,
+    include_baseline_tests: bool = True
 ) -> Dict[str, plt.Figure]:
     """
     Load statistical test results and create visualizations.
@@ -610,6 +605,7 @@ def visualize_statistical_tests(
     Args:
         tests_file: Path to CSV file with test results (if None, use default)
         config: Visualization configuration
+        include_baseline_tests: Whether to include baseline significance tests using CV results
         
     Returns:
         Dict[str, plt.Figure]: Dictionary of created figures
@@ -618,6 +614,7 @@ def visualize_statistical_tests(
     if tests_file is None:
         # Import settings
         import sys
+        import os
         
         # Add project root to path if needed
         project_root = Path(__file__).parent.parent.parent.absolute()
@@ -629,15 +626,75 @@ def visualize_statistical_tests(
         
         tests_file = settings.METRICS_DIR / "model_comparison_tests.csv"
     
-    # Check if file exists
-    if not Path(tests_file).exists():
+    # Clean up any outdated visualizations
+    from config import settings
+    output_dir = settings.VISUALIZATION_DIR / "statistical_tests"
+    if output_dir.exists():
+        # Remove deprecated matrices
+        for deprecated_file in ["enhanced_significance_matrix_Base_Random.png", "enhanced_significance_matrix_Yeo_Random.png"]:
+            deprecated_path = output_dir / deprecated_file
+            if deprecated_path.exists():
+                try:
+                    print(f"Removing deprecated visualization: {deprecated_path}")
+                    os.remove(deprecated_path)
+                except Exception as e:
+                    print(f"Error removing {deprecated_path}: {e}")
+    
+    # Dictionary to store figures
+    figures = {}
+    
+    # Generate pairwise comparison visualizations
+    if Path(tests_file).exists():
+        # Load tests
+        tests_df = pd.read_csv(tests_file)
+        
+        # Create visualizations
+        print("Generating enhanced significance matrix visualizations...")
+        pairwise_figures = plot_statistical_tests(tests_df, config)
+        
+        # Add to figures dictionary
+        figures.update(pairwise_figures)
+    else:
         print(f"Statistical tests file not found: {tests_file}")
-        print("Please run model evaluation first.")
-        return {}
+        print("Pairwise comparison visualizations will be skipped.")
     
-    # Load tests
-    tests_df = pd.read_csv(tests_file)
+    # Add baseline significance tests if requested
+    if include_baseline_tests:
+        try:
+            print("Generating baseline significance tests using CV results...")
+            from evaluation.baseline_significance import run_baseline_significance_analysis
+            from utils import io
+            
+            # Load all models
+            all_models = io.load_all_models()
+            
+            if all_models:
+                # Check if XGBoost models are missing
+                has_xgboost = any('XGB' in model_name for model_name in all_models)
+                
+                if not has_xgboost:
+                    print("WARNING: No XGBoost models found. Continuing analysis with available models.")
+                    print("To train XGBoost models, run: python main.py --train-xgboost")
+                
+                # Run the analysis with available models
+                _, baseline_plots = run_baseline_significance_analysis(all_models)
+                
+                # Add to figures dictionary
+                if baseline_plots:
+                    for name, fig in baseline_plots.items():
+                        figures[f'baseline_{name}'] = fig
+                    print("Baseline significance tests completed.")
+                else:
+                    print("No baseline significance plots were generated.")
+                    print("This may be because cross-validation metrics are not available in the models.")
+                    print("Check that the models were trained with cross-validation.")
+            else:
+                print("No models found. Baseline significance tests will be skipped.")
+                print("You may need to train models first with:")
+                print("  python main.py --train --train-xgboost --train-lightgbm --train-catboost")
+        except Exception as e:
+            print(f"Error generating baseline significance tests: {e}")
+            import traceback
+            traceback.print_exc()
     
-    # Create visualizations
-    print("Generating enhanced significance matrix visualizations...")
-    return plot_statistical_tests(tests_df, config)
+    return figures

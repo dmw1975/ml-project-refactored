@@ -96,10 +96,24 @@ class XGBoostAdapter(ModelData):
         """Get model performance metrics."""
         metrics = {}
         
-        # Copy standard metrics from model data
-        for metric in ['RMSE', 'MAE', 'MSE', 'R2']:
-            if metric in self.model_data:
-                metrics[metric] = self.model_data[metric]
+        # First check if metrics are stored in a nested 'metrics' dictionary
+        if 'metrics' in self.model_data and isinstance(self.model_data['metrics'], dict):
+            # Extract test metrics from nested structure
+            nested_metrics = self.model_data['metrics']
+            if 'test_rmse' in nested_metrics:
+                metrics['RMSE'] = nested_metrics['test_rmse']
+            if 'test_mae' in nested_metrics:
+                metrics['MAE'] = nested_metrics['test_mae']
+            if 'test_r2' in nested_metrics:
+                metrics['R2'] = nested_metrics['test_r2']
+            if 'test_mse' in nested_metrics:
+                metrics['MSE'] = nested_metrics['test_mse']
+        
+        # If not found in nested structure, check top-level
+        if not metrics:
+            for metric in ['RMSE', 'MAE', 'MSE', 'R2']:
+                if metric in self.model_data:
+                    metrics[metric] = self.model_data[metric]
         
         # Calculate any missing metrics
         if 'RMSE' not in metrics and 'MSE' in metrics:
@@ -108,7 +122,7 @@ class XGBoostAdapter(ModelData):
         if 'MSE' not in metrics and 'RMSE' in metrics:
             metrics['MSE'] = metrics['RMSE'] ** 2
             
-        if 'R2' not in metrics or 'MAE' not in metrics:
+        if 'R2' not in metrics or 'MAE' not in metrics or 'RMSE' not in metrics:
             y_test, y_pred = self.get_predictions()
             
             if 'R2' not in metrics:
@@ -118,6 +132,13 @@ class XGBoostAdapter(ModelData):
             if 'MAE' not in metrics:
                 from sklearn.metrics import mean_absolute_error
                 metrics['MAE'] = mean_absolute_error(y_test, y_pred)
+                
+            if 'RMSE' not in metrics:
+                from sklearn.metrics import mean_squared_error
+                metrics['RMSE'] = np.sqrt(mean_squared_error(y_test, y_pred))
+                
+            if 'MSE' not in metrics:
+                metrics['MSE'] = metrics['RMSE'] ** 2
         
         return metrics
     
@@ -140,6 +161,32 @@ class XGBoostAdapter(ModelData):
             'model_name': self.model_name,
             'model_type': self.model_data.get('model_type', 'XGBoost'),
         }
+        
+        # Extract dataset and variant from model name
+        # e.g., "XGBoost_Base_categorical_basic" -> dataset="Base", variant="categorical_basic"
+        if self.model_name and self.model_name != 'Unknown':
+            parts = self.model_name.split('_')
+            if len(parts) >= 2:
+                # Handle different naming patterns
+                if parts[0].lower() == 'xgboost' and len(parts) >= 3:
+                    # Extract dataset (Base, Yeo, Base_Random, Yeo_Random)
+                    if len(parts) >= 4 and parts[2].lower() == 'random':
+                        dataset = f"{parts[1]}_{parts[2]}"
+                        variant_start = 3
+                    else:
+                        dataset = parts[1]
+                        variant_start = 2
+                    
+                    # Extract variant (categorical_basic, categorical_optuna, etc.)
+                    variant_parts = parts[variant_start:]
+                    variant = '_'.join(variant_parts) if variant_parts else 'basic'
+                    
+                    # Create descriptive model name
+                    dataset_display = dataset.replace('_', ' ')
+                    variant_display = variant.replace('_', ' ').title()
+                    
+                    # Override the generic model_name with a descriptive one
+                    metadata['model_name'] = f"XGBoost_{dataset}_{variant}"
         
         # Add additional metadata if available
         for key in ['dataset', 'n_features', 'n_companies', 'n_companies_train', 'n_companies_test']:

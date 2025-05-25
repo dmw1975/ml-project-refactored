@@ -46,7 +46,7 @@ def get_adapter_for_model(model_data: Dict[str, Any]) -> ModelData:
         name = model_data['model_name'].lower()
         
         # Check for known model types in name
-        if 'xgb' in name:
+        if 'xgb' in name or 'xgboost' in name:
             model_type = 'xgboost'
         elif 'lightgbm' in name or 'lgbm' in name:
             model_type = 'lightgbm'
@@ -139,7 +139,7 @@ def load_model(model_name: str) -> ModelData:
     
     # Try to determine model type from name
     model_type = None
-    if 'xgb' in model_name.lower():
+    if 'xgb' in model_name.lower() or 'xgboost' in model_name.lower():
         model_type = 'xgboost'
     elif 'lightgbm' in model_name.lower() or 'lgbm' in model_name.lower():
         model_type = 'lightgbm'

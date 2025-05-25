@@ -68,9 +68,21 @@ def calculate_residuals(all_models):
     
     for model_name, model_data in all_models.items():
         print(f"Processing residuals for {model_name}...")
+        
+        # Skip if model_data is not a dictionary (e.g., raw Booster objects)
+        if not isinstance(model_data, dict):
+            print(f"WARNING: Skipping {model_name} - not in expected dictionary format")
+            continue
+            
+        # Check if required fields exist
+        if 'y_test' not in model_data:
+            print(f"WARNING: Skipping {model_name} - missing y_test data")
+            continue
+            
         # Extract test set predictions and actual values
         y_test = model_data['y_test']
-        y_pred = model_data['y_pred']
+        # Handle both 'y_pred' and 'y_test_pred' keys for compatibility
+        y_pred = model_data.get('y_pred', model_data.get('y_test_pred'))
         
         # Ensure y_test and y_pred have the same format and are aligned
         # Convert both to numpy arrays if they aren't already
@@ -121,37 +133,87 @@ def create_comparison_table(all_models):
     # Create DataFrame with metrics
     model_metrics = []
     for model_name, model_data in all_models.items():
+        # Skip if model_data is not a dictionary
+        if not isinstance(model_data, dict):
+            print(f"WARNING: Skipping {model_name} in comparison table - not in expected format")
+            continue
+        
+        # Initialize metrics with defaults
         metrics = {
-            'model_name': model_name,
-            'RMSE': model_data.get('RMSE', np.sqrt(model_data.get('MSE', 0))),
-            'MAE': model_data.get('MAE', 0),
-            'MSE': model_data.get('MSE', 0),
-            'R2': model_data.get('R2', 0),
-            'n_companies': model_data.get('n_companies', 0),
-            'n_features_used': model_data.get('n_features_used', None),
-            'alpha': model_data.get('alpha', None),
-            'l1_ratio': model_data.get('l1_ratio', None),
-            'model_type': model_data.get('model_type', 
-                        'ElasticNet' if 'ElasticNet' in model_name 
-                        else 'XGBoost' if 'XGB_' in model_name
-                        else 'LightGBM' if 'LightGBM_' in model_name
-                        else 'Linear Regression')
+            'Model': model_name,
+            'RMSE': np.nan,
+            'MAE': np.nan,
+            'MSE': np.nan,
+            'R2': np.nan,
+            'n_companies': 0
         }
-        model_metrics.append(metrics)
+        
+        # First priority: Check for standard metric keys
+        if 'RMSE' in model_data:
+            metrics['RMSE'] = model_data['RMSE']
+            metrics['MAE'] = model_data.get('MAE', np.nan)
+            metrics['MSE'] = model_data.get('MSE', metrics['RMSE']**2)
+            metrics['R2'] = model_data.get('R2', np.nan)
+        
+        # Second priority: Check nested metrics dictionary
+        elif 'metrics' in model_data and isinstance(model_data['metrics'], dict):
+            m = model_data['metrics']
+            # Check for standard keys in metrics
+            if 'RMSE' in m:
+                metrics['RMSE'] = m['RMSE']
+                metrics['MAE'] = m.get('MAE', np.nan)
+                metrics['MSE'] = m.get('MSE', metrics['RMSE']**2)
+                metrics['R2'] = m.get('R2', np.nan)
+            # Check for test_ prefixed keys
+            elif 'test_rmse' in m:
+                metrics['RMSE'] = m['test_rmse']
+                metrics['MAE'] = m.get('test_mae', np.nan)
+                metrics['MSE'] = m.get('test_mse', metrics['RMSE']**2)
+                metrics['R2'] = m.get('test_r2', np.nan)
+        
+        # Third priority: Check for test_ prefixed keys at top level
+        elif 'test_rmse' in model_data:
+            metrics['RMSE'] = model_data['test_rmse']
+            metrics['MAE'] = model_data.get('test_mae', np.nan)
+            metrics['MSE'] = model_data.get('test_mse', metrics['RMSE']**2)
+            metrics['R2'] = model_data.get('test_r2', np.nan)
+        
+        # Fourth priority: Calculate from y_test and y_pred if available
+        elif 'y_test' in model_data and 'y_pred' in model_data:
+            from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+            y_test = model_data['y_test']
+            y_pred = model_data['y_pred']
+            
+            mse = mean_squared_error(y_test, y_pred)
+            metrics['MSE'] = mse
+            metrics['RMSE'] = np.sqrt(mse)
+            metrics['MAE'] = mean_absolute_error(y_test, y_pred)
+            metrics['R2'] = r2_score(y_test, y_pred)
+        
+        # Get n_companies
+        if 'n_companies' in model_data:
+            metrics['n_companies'] = model_data['n_companies']
+        elif 'y_test' in model_data:
+            try:
+                metrics['n_companies'] = len(model_data['y_test'])
+            except:
+                metrics['n_companies'] = 0
+        
+        # Only add if we have at least RMSE
+        if not np.isnan(metrics['RMSE']):
+            model_metrics.append(metrics)
+        else:
+            print(f"WARNING: No metrics found for {model_name}")
     
-    # Convert to DataFrame
-    metrics_df = pd.DataFrame(model_metrics)
+    # Create DataFrame
+    comparison_df = pd.DataFrame(model_metrics)
     
-    # Save to CSV
-    io.ensure_dir(settings.METRICS_DIR)
-    metrics_df.to_csv(f"{settings.METRICS_DIR}/all_models_comparison.csv", index=False)
+    # Sort by RMSE
+    if len(comparison_df) > 0:
+        comparison_df = comparison_df.sort_values('RMSE')
     
-    # Print summary
-    print("\nModel Comparison Summary:")
-    print("=========================")
-    print(metrics_df[['model_name', 'RMSE', 'R2', 'model_type']].sort_values('RMSE'))
-    
-    return metrics_df
+    return comparison_df
+
 
 def perform_statistical_tests(all_models):
     """Perform statistical tests to compare serious models with Holm-Bonferroni correction."""
@@ -159,15 +221,24 @@ def perform_statistical_tests(all_models):
     import numpy as np
     import pandas as pd
 
-    # Define allowed serious model types
-    allowed_model_types = ['elasticnet', 'xgb', 'catboost', 'lightgbm']
+    # Define allowed serious model types - include all model types
+    allowed_model_types = ['elasticnet', 'xgb', 'catboost', 'lightgbm', 'lr_', 'linear']
 
     def is_allowed(name):
         name = name.lower()
+        # Check for all allowed types
         return any(allowed_type in name for allowed_type in allowed_model_types)
 
-    # Filter models
-    filtered_models = {name: model for name, model in all_models.items() if is_allowed(name)}
+    # Filter models - also check if they are dictionaries
+    filtered_models = {}
+    for name, model in all_models.items():
+        if is_allowed(name) and isinstance(model, dict) and 'y_test' in model and 'y_pred' in model:
+            filtered_models[name] = model
+        elif is_allowed(name) and isinstance(model, dict) and 'y_test' in model and 'y_test_pred' in model:
+            # Handle alternative key name
+            model['y_pred'] = model['y_test_pred']
+            filtered_models[name] = model
+            
     model_names = list(filtered_models.keys())
     n_models = len(model_names)
 
@@ -188,11 +259,11 @@ def perform_statistical_tests(all_models):
 
             # Extract and flatten y_test and y_pred for model_a
             y_test_a = np.array(filtered_models[model_a]['y_test']).flatten()
-            y_pred_a = np.array(filtered_models[model_a]['y_pred']).flatten()
+            y_pred_a = np.array(filtered_models[model_a].get('y_pred', filtered_models[model_a].get('y_test_pred'))).flatten()
 
             # Extract and flatten y_test and y_pred for model_b
             y_test_b = np.array(filtered_models[model_b]['y_test']).flatten()
-            y_pred_b = np.array(filtered_models[model_b]['y_pred']).flatten()
+            y_pred_b = np.array(filtered_models[model_b].get('y_pred', filtered_models[model_b].get('y_test_pred'))).flatten()
 
             # Calculate squared errors
             se_a = (y_test_a - y_pred_a) ** 2
@@ -259,12 +330,32 @@ def evaluate_models():
     print("\nPerforming statistical tests...")
     tests_df = perform_statistical_tests(all_models)
     
+    # Run baseline comparison if there are models
+    print("\nRunning baseline comparisons against random models...")
+    try:
+        from evaluation.baselines import run_baseline_evaluation
+        baseline_comparison, baseline_summary = run_baseline_evaluation(all_models)
+        print(f"Baseline comparison complete. Generated {len(baseline_summary)} model comparisons.")
+        
+        # Print a preview of the results
+        if not baseline_summary.empty:
+            print("\nBaseline Comparison Preview (Top 5 Models):")
+            pd.set_option('display.max_columns', None)
+            pd.set_option('display.width', 120)
+            print(baseline_summary[['Model', 'RMSE', 'Baseline RMSE', 'Improvement (%)', 'Significant']].head())
+    except Exception as e:
+        print(f"Error in baseline evaluation: {e}")
+        baseline_comparison = None
+        baseline_summary = None
+    
     print("\nEvaluation complete. Results saved to metrics directory.")
     return {
         'all_models': all_models,
         'residuals': residuals,
         'metrics_df': metrics_df,
-        'tests_df': tests_df
+        'tests_df': tests_df,
+        'baseline_comparison': baseline_comparison,
+        'baseline_summary': baseline_summary
     }
 
 if __name__ == "__main__":

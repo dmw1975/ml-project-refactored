@@ -10,6 +10,26 @@ sys.path.append(str(project_dir))
 
 from config import settings
 
+def get_data_loading_strategy(use_one_hot):
+    """Get the appropriate data loading strategy based on encoding preference."""
+    if use_one_hot:
+        # Use standard one-hot encoded data loading (legacy behavior)
+        # Note: data module doesn't have load_data, so we use categorical approach for all
+        print("Note: One-hot encoding requested but using standard data loading approach")
+        # Fall through to categorical approach which works for all models
+    
+    # Use categorical data loading (default for tree models)
+    try:
+        from data_categorical import load_tree_models_data, load_linear_models_data
+        return load_tree_models_data, load_linear_models_data
+    except ImportError:
+        print("⚠️  Categorical data module not found. Creating categorical datasets...")
+        # Create categorical datasets if they don't exist
+        from create_categorical_datasets import main as create_datasets
+        create_datasets()
+        from data_categorical import load_tree_models_data, load_linear_models_data
+        return load_tree_models_data, load_linear_models_data
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='ML model training and evaluation')
@@ -30,6 +50,9 @@ def parse_args():
     parser.add_argument('--visualize-sector', action='store_true', help='Generate sector-specific visualizations')
     parser.add_argument('--visualize-sector-new', action='store_true', help='Generate sector-specific visualizations using new architecture')
     parser.add_argument('--all-sector', action='store_true', help='Run the entire sector model pipeline')
+    parser.add_argument('--train-sector-lightgbm', action='store_true', help='Train sector-specific LightGBM models')
+    parser.add_argument('--evaluate-sector-lightgbm', action='store_true', help='Evaluate sector-specific LightGBM models')
+    parser.add_argument('--visualize-sector-lightgbm', action='store_true', help='Generate sector-specific LightGBM visualizations')
     parser.add_argument('--sector-only', action='store_true', 
                     help='Run only sector models, skipping standard models')
     parser.add_argument('--vif', action='store_true', help='Analyze multicollinearity using VIF')
@@ -45,15 +68,36 @@ def parse_args():
     parser.add_argument('--optimize-catboost', type=int, metavar='N',
                         help='Optimize CatBoost with Optuna using N trials (default: 50)')
     parser.add_argument('--visualize-catboost', action='store_true', help='Generate CatBoost visualizations')
+    parser.add_argument('--force-retune', action='store_true', 
+                        help='Force retraining of Optuna studies even if they exist')
+    parser.add_argument('--check-studies', action='store_true', 
+                        help='Report existing Optuna studies without training')
+    parser.add_argument('--use-one-hot', action='store_true', 
+                        help='Use one-hot encoded features for tree models (default: native categorical features)')
 
     return parser.parse_args()
 
 def main():
     """Main function."""
+    # Start timing the execution
+    import time
+    import datetime
+    start_time = time.time()
+    
+    # Dictionary to track execution time of each step
+    step_times = {}
+    
     args = parse_args()
     
     # Import settings
     from config import settings
+    
+    # Handle check-studies flag first
+    if args.check_studies:
+        print("🔍 Checking existing Optuna studies...")
+        from utils.io import report_existing_studies
+        report_existing_studies()
+        return
     
     # Determine if we should run standard models
     run_standard = not args.sector_only
@@ -62,23 +106,63 @@ def main():
     print(f"Project root: {settings.ROOT_DIR}")
     print(f"Data directory: {settings.DATA_DIR}")
     print(f"Output directory: {settings.OUTPUT_DIR}")
+    
+    # Set up data loading strategy based on encoding preference
+    if args.use_one_hot:
+        print("🔢 Using one-hot encoded features for all models (legacy mode)")
+    else:
+        print("🌳 Using native categorical features for tree models (default)")
+        print("🔢 Using one-hot encoded features for linear models")
+    
+    load_tree_data, load_linear_data = get_data_loading_strategy(args.use_one_hot)
 
     # Standard model pipeline
     if run_standard:
+        # Consolidated confirmation check for all models when using --all
+        should_retrain_all = True
+        if args.all and not args.force_retune:
+            print("\n🔍 Checking for existing trained models across all algorithms...")
+            from utils.io import check_all_existing_models, prompt_consolidated_retrain
+            
+            all_existing_models = check_all_existing_models(datasets=args.datasets)
+            if all_existing_models:
+                should_retrain_all = prompt_consolidated_retrain(all_existing_models)
+            else:
+                print("✨ No existing models found - proceeding with full training...")
+                should_retrain_all = True
+        
         if args.all or args.train or args.train_linear:
-            print("\nTraining linear regression models...")
-            from models.linear_regression import train_all_models
-            linear_models = train_all_models()
+            if should_retrain_all or not args.all:
+                print("\nTraining linear regression models...")
+                step_start = time.time()
+                from models.linear_regression import train_all_models
+                linear_models = train_all_models()
+                step_times["Linear Regression Training"] = time.time() - step_start
+            else:
+                print("\n⏭️  Skipping Linear Regression training - using existing models")
+                step_times["Linear Regression Training"] = 0
 
         # Add XGBoost section after the standard model pipeline (FIXED INDENTATION)
         if args.all or args.train_xgboost or args.optimize_xgboost:
-            print("\nTraining XGBoost models...")
-            from models.xgboost_model import train_xgboost_models
-            
-            # Determine number of trials
-            n_trials = args.optimize_xgboost if args.optimize_xgboost else settings.XGBOOST_PARAMS.get('n_trials', 50)
-            
-            xgboost_models = train_xgboost_models(datasets=args.datasets, n_trials=n_trials)
+            if should_retrain_all or not args.all or args.force_retune:
+                print("\nTraining XGBoost models...")
+                step_start = time.time()
+                
+                if args.use_one_hot:
+                    print("  🔢 Using one-hot encoded XGBoost implementation (legacy mode)")
+                    from models.xgboost_categorical import train_xgboost_models
+                    # Determine number of trials
+                    n_trials = args.optimize_xgboost if args.optimize_xgboost else settings.XGBOOST_PARAMS.get('n_trials', 50)
+                    xgboost_models = train_xgboost_models(datasets=args.datasets, n_trials=n_trials, force_retune=args.force_retune)
+                else:
+                    print("  🌳 Using native categorical XGBoost implementation (default)")
+                    from models.xgboost_categorical import train_xgboost_categorical_models
+                    xgboost_models = train_xgboost_categorical_models(datasets=args.datasets)
+                
+                step_times["XGBoost Training"] = time.time() - step_start
+            else:
+                print("\n⏭️  Skipping XGBoost training - using existing models")
+                step_times["XGBoost Training"] = 0
         
         if args.train_linear_elasticnet:
             print("\nTraining linear models with optimal ElasticNet parameters...")
@@ -86,14 +170,22 @@ def main():
             linear_elasticnet_models = train_linear_with_elasticnet_params()
         
         if args.all or args.train:  # Make sure this matches your args
-            print("\nTraining ElasticNet models...")
-            from models.elastic_net import train_elasticnet_models
-            elastic_models = train_elasticnet_models(datasets=args.datasets)
+            if should_retrain_all or not args.all:
+                print("\nTraining ElasticNet models...")
+                step_start = time.time()
+                from models.elastic_net import train_elasticnet_models
+                elastic_models = train_elasticnet_models(datasets=args.datasets)
+                step_times["ElasticNet Training"] = time.time() - step_start
+            else:
+                print("\n⏭️  Skipping ElasticNet training - using existing models")
+                step_times["ElasticNet Training"] = 0
         
         if args.all or args.evaluate:
             print("\nEvaluating models...")
+            step_start = time.time()
             from evaluation.metrics import evaluate_models
             eval_results = evaluate_models()
+            step_times["Model Evaluation"] = time.time() - step_start
             
             print("\nAnalyzing feature importance...")
             from evaluation.importance import analyze_feature_importance
@@ -106,6 +198,7 @@ def main():
             
         if args.all or args.visualize or args.visualize_new:
             print("\nGenerating visualizations using unified architecture...")
+            step_start = time.time()
             
             # Import from visualization_new architecture
             import visualization_new as viz
@@ -199,10 +292,8 @@ def main():
                         print(f"Statistical tests file not found: {tests_file}")
                 except Exception as e:
                     print(f"Error creating statistical visualizations: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy statistical tests...")
-                    from visualization.statistical_tests import visualize_statistical_tests
-                    visualize_statistical_tests()
+                    import traceback
+                    traceback.print_exc()
                 
                 # ElasticNet specific visualization
                 try:
@@ -392,10 +483,25 @@ def main():
                 except Exception as e:
                     print(f"Error creating cross-model feature importance comparisons: {e}")
                 
+                # Add baseline comparison visualizations
+                try:
+                    print("\nCreating baseline comparison visualizations...")
+                    from visualization_new.plots.baselines import visualize_all_baseline_comparisons
+                    
+                    baseline_figures = visualize_all_baseline_comparisons(create_individual_plots=False)
+                    if baseline_figures:
+                        print("Baseline comparison visualizations created successfully.")
+                    else:
+                        print("No baseline comparison visualizations were created.")
+                except Exception as e:
+                    print(f"Error creating baseline comparison visualizations: {e}")
+                
                 print("Visualization completed successfully.")
+                step_times["New Visualization"] = time.time() - step_start
             except Exception as e:
                 print(f"Error in visualization pipeline: {e}")
                 print("Falling back to legacy visualization...")
+                step_times["Failed New Visualization"] = time.time() - step_start
                 
                 # Import legacy visualization as a last resort
                 print("\nFalling back to legacy visualization module...")
@@ -601,13 +707,25 @@ def main():
                     visualize_xgboost_models()
             
         if args.all or args.train_lightgbm or args.optimize_lightgbm:
-            print("\nTraining LightGBM models...")
-            from models.lightgbm_model import train_lightgbm_models
-            
-            # Determine number of trials
-            n_trials = args.optimize_lightgbm if args.optimize_lightgbm else settings.LIGHTGBM_PARAMS.get('n_trials', 50)
-            
-            lightgbm_models = train_lightgbm_models(datasets=args.datasets, n_trials=n_trials)
+            if should_retrain_all or not args.all or args.force_retune:
+                print("\nTraining LightGBM models...")
+                step_start = time.time()
+                
+                if args.use_one_hot:
+                    print("  🔢 Using one-hot encoded LightGBM implementation (legacy mode)")
+                    from models.lightgbm_categorical import train_lightgbm_models
+                    # Determine number of trials
+                    n_trials = args.optimize_lightgbm if args.optimize_lightgbm else settings.LIGHTGBM_PARAMS.get('n_trials', 50)
+                    lightgbm_models = train_lightgbm_models(datasets=args.datasets, n_trials=n_trials)
+                else:
+                    print("  🌳 Using native categorical LightGBM implementation (default)")
+                    from models.lightgbm_categorical import train_lightgbm_categorical_models
+                    lightgbm_models = train_lightgbm_categorical_models(datasets=args.datasets)
+                
+                step_times["LightGBM Training"] = time.time() - step_start
+            else:
+                print("\n⏭️  Skipping LightGBM training - using existing models")
+                step_times["LightGBM Training"] = 0
             
         if args.all or args.visualize_lightgbm:
             print("\nGenerating LightGBM visualizations...")
@@ -732,13 +850,25 @@ def main():
                     visualize_lightgbm_models()
             
         if args.all or args.train_catboost or args.optimize_catboost:
-            print("\nTraining CatBoost models...")
-            from models.catboost_model import train_catboost_models
-            
-            # Determine number of trials
-            n_trials = args.optimize_catboost if args.optimize_catboost else settings.CATBOOST_PARAMS.get('n_trials', 50)
-            
-            catboost_models = train_catboost_models(datasets=args.datasets, n_trials=n_trials)
+            if should_retrain_all or not args.all or args.force_retune:
+                print("\nTraining CatBoost models...")
+                step_start = time.time()
+                
+                if args.use_one_hot:
+                    print("  🔢 Using one-hot encoded CatBoost implementation (legacy mode)")
+                    from models.catboost_categorical import train_catboost_models
+                    # Determine number of trials
+                    n_trials = args.optimize_catboost if args.optimize_catboost else settings.CATBOOST_PARAMS.get('n_trials', 50)
+                    catboost_models = train_catboost_models(datasets=args.datasets, n_trials=n_trials)
+                else:
+                    print("  🌳 Using native categorical CatBoost implementation (default)")
+                    from models.catboost_categorical import run_all_catboost_categorical
+                    catboost_models = run_all_catboost_categorical()
+                
+                step_times["CatBoost Training"] = time.time() - step_start
+            else:
+                print("\n⏭️  Skipping CatBoost training - using existing models")
+                step_times["CatBoost Training"] = 0
             
         if args.all or args.visualize_catboost:
             print("\nGenerating CatBoost visualizations...")
@@ -892,7 +1022,7 @@ def main():
         from visualization.sector_plots import visualize_sector_models
         visualize_sector_models(run_all=True)
     
-    if args.all_sector or args.visualize_sector_new or (args.all and args.visualize_new):
+    if args.all_sector or args.visualize_sector_new or args.all or (args.all and args.visualize_new):
         print("\nGenerating sector visualizations using new architecture...")
         try:
             import visualization_new as viz
@@ -900,9 +1030,151 @@ def main():
             print("Sector visualizations with new architecture complete.")
         except Exception as e:
             print(f"Error generating sector visualizations with new architecture: {e}")
+            print(f"Error details: {str(e)}")
             print("Continuing with legacy sector visualizations...")
+    
+    # LightGBM Sector model pipeline
+    if args.train_sector_lightgbm:
+        print("\nTraining sector-specific LightGBM models...")
+        from models.sector_lightgbm_models import run_sector_lightgbm_models
+        sector_lightgbm_models = run_sector_lightgbm_models()
 
+    if args.evaluate_sector_lightgbm:
+        print("\nEvaluating sector-specific LightGBM models...")
+        from models.sector_lightgbm_models import evaluate_sector_lightgbm_models
+        sector_lightgbm_eval_results = evaluate_sector_lightgbm_models()
+        
+        print("\nAnalyzing sector LightGBM model feature importance...")
+        from models.sector_lightgbm_models import analyze_sector_lightgbm_importance
+        sector_lightgbm_importance_results = analyze_sector_lightgbm_importance()
+
+    if args.visualize_sector_lightgbm:
+        print("\nGenerating sector-specific LightGBM visualizations...")
+        
+        # Use the new visualization architecture for LightGBM sectors
+        try:
+            from visualization_new.plots.sectors import visualize_lightgbm_sector_plots
+            
+            # Check if LightGBM sector models exist
+            lightgbm_metrics_file = settings.METRICS_DIR / "sector_lightgbm_metrics.csv"
+            if lightgbm_metrics_file.exists():
+                # Generate LightGBM sector visualizations
+                lightgbm_figures = visualize_lightgbm_sector_plots()
+                
+                if lightgbm_figures:
+                    print(f"Generated {len(lightgbm_figures)} LightGBM sector visualization plots")
+                    print(f"Plots saved to: {settings.VISUALIZATION_DIR / 'sectors' / 'lightgbm'}")
+                else:
+                    print("No LightGBM sector visualizations were generated")
+            else:
+                print("No LightGBM sector metrics found. Please train models first with --train-sector-lightgbm")
+        except Exception as e:
+            print(f"Error generating LightGBM sector visualizations: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Run additional visualizations when using --all flag
+    if args.all:
+        step_start = time.time()
+        run_additional_visualizations()
+        step_times["Additional Visualizations"] = time.time() - step_start
+    
+    # Calculate and display execution time
+    end_time = time.time()
+    execution_time = end_time - start_time
+    
+    # Format as hours, minutes, seconds
+    time_formatted = str(datetime.timedelta(seconds=int(execution_time)))
+    
     print("\nDone!")
+    print(f"\nTotal execution time: {time_formatted} (HH:MM:SS)")
+    
+    # Display detailed breakdown by step
+    if step_times:
+        print("\nExecution time breakdown by step:")
+        print("-" * 50)
+        print(f"{'Step':<35} | {'Time (sec)':<10} | {'Time %':<10}")
+        print("-" * 50)
+        
+        # Sort by execution time (descending)
+        sorted_steps = sorted(step_times.items(), key=lambda x: x[1], reverse=True)
+        
+        for step, step_time in sorted_steps:
+            percent = (step_time / execution_time) * 100
+            time_formatted = str(datetime.timedelta(seconds=int(step_time)))
+            print(f"{step:<35} | {time_formatted:<10} | {percent:6.2f}%")
+    
+    # If the execution was longer than 5 minutes, provide a simpler breakdown
+    if execution_time > 300:
+        hours = int(execution_time // 3600)
+        minutes = int((execution_time % 3600) // 60)
+        seconds = int(execution_time % 60)
+        
+        print(f"\nTotal runtime: {hours} hours, {minutes} minutes, {seconds} seconds")
+
+def run_additional_visualizations():
+    """Run additional visualizations not covered in the standard visualization modules."""
+    try:
+        # Add cross-validation plots
+        print("\nGenerating cross-validation plots...")
+        from generate_model_cv_plots import main as generate_cv_plots
+        generate_cv_plots()
+        
+        # Add ElasticNet CV plots
+        print("\nGenerating ElasticNet CV plots...")
+        from generate_elasticnet_cv_plots import generate_elasticnet_cv_plots
+        generate_elasticnet_cv_plots()
+        
+        # Add stratified splitting plot
+        print("\nGenerating sector stratification plots...")
+        from create_sector_stratification_plot import create_sector_stratification_plot
+        create_sector_stratification_plot()
+        
+        # Add SHAP visualizations
+        try:
+            print("\nGenerating SHAP visualizations...")
+            from generate_shap_visualizations import main as generate_shap_viz
+            generate_shap_viz()
+        except Exception as e:
+            print(f"Warning: SHAP visualization generation partially failed: {e}")
+            print("Some SHAP plots may have been created successfully. Check outputs/visualizations/shap/")
+        
+        # Add baseline comparison visualizations
+        try:
+            print("\nGenerating baseline comparison visualizations...")
+            # First try to load and generate from existing metrics
+            from visualization_new.plots.baselines import visualize_all_baseline_comparisons
+            baseline_figures = visualize_all_baseline_comparisons(create_individual_plots=False)
+            
+            # If that doesn't work, run the baseline evaluation directly
+            if not baseline_figures:
+                print("No existing baseline metrics found. Running baseline evaluation...")
+                from utils import io
+                all_models = io.load_all_models()
+                
+                if all_models:
+                    from evaluation.baselines import run_baseline_evaluation
+                    
+                    # Run evaluation with all baseline types (random, mean, median)
+                    print("Running random, mean, and median baseline evaluations...")
+                    _, _ = run_baseline_evaluation(
+                        all_models,
+                        include_mean=True,
+                        include_median=True
+                    )
+                    
+                    # Now try the visualization again
+                    baseline_figures = visualize_all_baseline_comparisons(create_individual_plots=False)
+                    if baseline_figures:
+                        print("Baseline comparison visualizations created successfully.")
+                else:
+                    print("No models found. Cannot generate baseline comparisons.")
+        except Exception as e:
+            print(f"Error generating baseline comparison visualizations: {e}")
+        
+        print("\nAdditional visualizations complete.")
+    except Exception as e:
+        print(f"Error generating additional visualizations: {e}")
 
 if __name__ == "__main__":
     main()
