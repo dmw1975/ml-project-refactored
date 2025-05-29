@@ -1,4 +1,7 @@
-"""ElasticNet models for ESG score prediction."""
+"""
+ElasticNet models for ESG score prediction.
+Now includes Optuna optimization for better hyperparameter tuning.
+"""
 
 import numpy as np
 import pandas as pd
@@ -16,6 +19,7 @@ from config import settings
 from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
 from utils import io
 from models.linear_regression import perform_stratified_split_by_sector
+from enhanced_elasticnet_optuna import train_enhanced_elasticnet
 
 import os
 
@@ -201,14 +205,18 @@ def find_optimal_parameters(X_data, y_data, param_key,
     
     return best_params, results_df
 
-def train_elasticnet_models(datasets=None):
+def train_elasticnet_models(datasets=None, use_optuna=True, n_trials=100):
     """
-    Find optimal parameters, train ElasticNet models, and save results.
+    Train ElasticNet models with either grid search or Optuna optimization.
     
     Parameters:
     -----------
     datasets : list, optional
         List of dataset names to process. If None, all datasets are processed.
+    use_optuna : bool, default=True
+        Whether to use Optuna optimization instead of grid search
+    n_trials : int, default=100
+        Number of Optuna trials (ignored if use_optuna=False)
     """
     # Force reload data module to ensure latest version
     import importlib
@@ -260,68 +268,115 @@ def train_elasticnet_models(datasets=None):
     else:
         selected_datasets = all_datasets
 
-    print("\n" + "="*50)
-    print(f"Finding Optimal ElasticNet Parameters for {len(selected_datasets)} Datasets")
-    print("="*50)
-
-    param_results = []
-
-    # 🔵 First: find optimal parameters
-    for config in selected_datasets:
-        print(f"\nProcessing dataset: {config['name']}...")
-        best_params, results_df = find_optimal_parameters(
-            config['data'],
-            y,
-            param_key=config['name'],
-            random_state=settings.ELASTICNET_PARAMS['random_state'],
-            test_size=settings.ELASTICNET_PARAMS['test_size']
-        )
+    if use_optuna:
+        print("\n" + "="*50)
+        print(f"Training ElasticNet with Optuna Optimization ({n_trials} trials)")
+        print("="*50)
         
-        best_cv_mse = results_df['mean_rmse'].min()
-        best_cv_mse_std = results_df.loc[results_df['mean_rmse'].idxmin(), 'std_rmse']
+        model_results = {}
         
-        param_results.append({
-            'dataset': config['name'],
-            'best_params': best_params,
-            'cv_results': results_df,
-            'best_cv_mse': best_cv_mse,
-            'best_cv_mse_std': best_cv_mse_std
-        })
-    
-    # Save parameter results
-    io.save_model(param_results, "elasticnet_params.pkl", settings.MODEL_DIR)
-
-    print("\n" + "="*50)
-    print("Training ElasticNet Models with Optimal Parameters")
-    print("="*50)
-
-    model_results = {}
-
-    # 🔵 Then: train models using optimal parameters
-    for config, param_result in zip(selected_datasets, param_results):
-        alpha, l1_ratio = param_result['best_params']
-        best_cv_mse = param_result['best_cv_mse']
-        best_cv_mse_std = param_result['best_cv_mse_std']
+        # Train both basic and Optuna models for each dataset
+        for config in selected_datasets:
+            print(f"\nProcessing dataset: {config['name']}...")
+            
+            # Use enhanced ElasticNet with Optuna
+            results = train_enhanced_elasticnet(
+                config['data'],
+                y,
+                dataset_name=config['name'],
+                test_size=settings.ELASTICNET_PARAMS['test_size'],
+                random_state=settings.ELASTICNET_PARAMS['random_state'],
+                n_trials=n_trials
+            )
+            
+            # Add results to model_results
+            for model_name, model_data in results.items():
+                model_results[model_name] = model_data
         
-        model_name = f"ElasticNet_{config['name']}"
-        print(f"\nTraining {model_name}...")
+        # Save results
+        io.save_model(model_results, "elasticnet_models.pkl", settings.MODEL_DIR)
+        
+        # Also save parameter results for compatibility
+        param_results = []
+        for config in selected_datasets:
+            # Extract Optuna results
+            optuna_key = f"ElasticNet_{config['name']}_optuna"
+            if optuna_key in model_results:
+                optuna_data = model_results[optuna_key]
+                param_results.append({
+                    'dataset': config['name'],
+                    'best_params': (optuna_data['alpha'], optuna_data['l1_ratio']),
+                    'cv_results': None,  # Optuna doesn't use DataFrame results
+                    'best_cv_mse': optuna_data.get('cv_mean', optuna_data['MSE']),
+                    'best_cv_mse_std': optuna_data.get('cv_std', 0)
+                })
+        
+        io.save_model(param_results, "elasticnet_params.pkl", settings.MODEL_DIR)
+        
+    else:
+        # Original grid search implementation
+        print("\n" + "="*50)
+        print(f"Finding Optimal ElasticNet Parameters for {len(selected_datasets)} Datasets")
+        print("="*50)
 
-        results = run_elasticnet_model(
-            config['data'],
-            y,
-            model_name=model_name,
-            alpha=alpha,
-            l1_ratio=l1_ratio,
-            random_state=settings.ELASTICNET_PARAMS['random_state'],
-            test_size=settings.ELASTICNET_PARAMS['test_size'],
-            cv_mse=best_cv_mse,
-            cv_mse_std=best_cv_mse_std
-        )
+        param_results = []
 
-        model_results[model_name] = results
+        # First: find optimal parameters
+        for config in selected_datasets:
+            print(f"\nProcessing dataset: {config['name']}...")
+            best_params, results_df = find_optimal_parameters(
+                config['data'],
+                y,
+                param_key=config['name'],
+                random_state=settings.ELASTICNET_PARAMS['random_state'],
+                test_size=settings.ELASTICNET_PARAMS['test_size']
+            )
+            
+            best_cv_mse = results_df['mean_rmse'].min()
+            best_cv_mse_std = results_df.loc[results_df['mean_rmse'].idxmin(), 'std_rmse']
+            
+            param_results.append({
+                'dataset': config['name'],
+                'best_params': best_params,
+                'cv_results': results_df,
+                'best_cv_mse': best_cv_mse,
+                'best_cv_mse_std': best_cv_mse_std
+            })
+        
+        # Save parameter results
+        io.save_model(param_results, "elasticnet_params.pkl", settings.MODEL_DIR)
 
-    # Save trained model results
-    io.save_model(model_results, "elasticnet_models.pkl", settings.MODEL_DIR)
+        print("\n" + "="*50)
+        print("Training ElasticNet Models with Optimal Parameters")
+        print("="*50)
+
+        model_results = {}
+
+        # Then: train models using optimal parameters
+        for config, param_result in zip(selected_datasets, param_results):
+            alpha, l1_ratio = param_result['best_params']
+            best_cv_mse = param_result['best_cv_mse']
+            best_cv_mse_std = param_result['best_cv_mse_std']
+            
+            model_name = f"ElasticNet_{config['name']}"
+            print(f"\nTraining {model_name}...")
+
+            results = run_elasticnet_model(
+                config['data'],
+                y,
+                model_name=model_name,
+                alpha=alpha,
+                l1_ratio=l1_ratio,
+                random_state=settings.ELASTICNET_PARAMS['random_state'],
+                test_size=settings.ELASTICNET_PARAMS['test_size'],
+                cv_mse=best_cv_mse,
+                cv_mse_std=best_cv_mse_std
+            )
+
+            model_results[model_name] = results
+
+        # Save trained model results
+        io.save_model(model_results, "elasticnet_models.pkl", settings.MODEL_DIR)
 
     # Save summary metrics
     metrics_df = pd.DataFrame([
@@ -331,10 +386,10 @@ def train_elasticnet_models(datasets=None):
             'MAE': metrics['MAE'],
             'MSE': metrics['MSE'],
             'R2': metrics['R2'],
-            'alpha': metrics['alpha'],
-            'l1_ratio': metrics['l1_ratio'],
-            'n_features_used': metrics['n_features_used'],
-            'n_companies': metrics['n_companies'],
+            'alpha': metrics.get('alpha'),
+            'l1_ratio': metrics.get('l1_ratio'),
+            'n_features_used': metrics.get('n_features_used'),
+            'n_companies': metrics.get('n_companies'),
             'cv_mse': metrics.get('cv_mse', None),
             'cv_mse_std': metrics.get('cv_mse_std', None)
         }

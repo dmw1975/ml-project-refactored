@@ -723,7 +723,7 @@ def create_cross_model_feature_importance_by_dataset(
         # Extract dataset name and model family
         family = ModelFamily.from_model_name(model_name)
         dataset = family.get_dataset_from_model_name(model_name)
-        model_family_type = family.model_type
+        model_family_type = family.family_type.value
         
         # Skip unknown datasets
         if dataset == 'Unknown':

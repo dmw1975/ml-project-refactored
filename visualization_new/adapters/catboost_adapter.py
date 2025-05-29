@@ -31,7 +31,11 @@ class CatBoostAdapter(ModelData):
     def get_predictions(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get test set predictions and actual values."""
         y_test = self.model_data.get('y_test')
-        y_pred = self.model_data.get('y_pred') or self.model_data.get('y_test_pred')
+        
+        # Get predictions - check both possible keys
+        y_pred = self.model_data.get('y_pred')
+        if y_pred is None:
+            y_pred = self.model_data.get('y_test_pred')
         
         if y_test is None or y_pred is None:
             raise ValueError(f"Missing y_test or y_pred/y_test_pred in model data for {self.model_name}")
@@ -52,15 +56,21 @@ class CatBoostAdapter(ModelData):
         
         # Check if precomputed feature importance exists
         if 'feature_importance' in self.model_data:
-            importance_df = self.model_data['feature_importance']
+            importance_df = self.model_data['feature_importance'].copy()
             
             # Ensure correct format
             if not isinstance(importance_df, pd.DataFrame):
                 raise ValueError(f"Feature importance is not a DataFrame for {self.model_name}")
             
+            # Handle different column naming conventions
+            if 'feature' in importance_df.columns and 'Feature' not in importance_df.columns:
+                importance_df = importance_df.rename(columns={'feature': 'Feature'})
+            if 'importance' in importance_df.columns and 'Importance' not in importance_df.columns:
+                importance_df = importance_df.rename(columns={'importance': 'Importance'})
+            
             # Ensure required columns
             if 'Feature' not in importance_df.columns or 'Importance' not in importance_df.columns:
-                raise ValueError(f"Feature importance DataFrame missing required columns for {self.model_name}")
+                raise ValueError(f"Feature importance DataFrame missing required columns for {self.model_name}. Found: {list(importance_df.columns)}")
             
             # Add Std column if missing
             if 'Std' not in importance_df.columns:
@@ -211,4 +221,24 @@ class CatBoostAdapter(ModelData):
         Returns:
             The raw model data dictionary
         """
+
+    def get_model_type(self) -> str:
+        """Get model type."""
+        return "CatBoost"
+    
+    def get_dataset_name(self) -> str:
+        """Get dataset name from model name."""
+        if hasattr(self, 'model_name') and self.model_name:
+            # Extract dataset from model name (e.g., "XGBoost_Base_categorical_optuna" -> "Base")
+            parts = self.model_name.split('_')
+            if len(parts) >= 2:
+                # Handle cases like Base, Yeo, Base_Random, Yeo_Random
+                if len(parts) >= 3 and parts[2] == 'Random':
+                    return f"{parts[1]}_{parts[2]}"
+                else:
+                    return parts[1]
+        return "Unknown"
+    
+    def get_raw_model_data(self) -> dict:
+        """Get raw model data dictionary."""
         return self.model_data

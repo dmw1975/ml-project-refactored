@@ -209,6 +209,11 @@ def plot_residuals(
     Returns:
         matplotlib.figure.Figure: The created figure
     """
+    # Wrap in adapter if needed
+    if isinstance(model_data, dict):
+        from visualization_new.core.registry import get_adapter_for_model
+        model_data = get_adapter_for_model(model_data)
+    
     plot = ResidualPlot(model_data, config)
     return plot.plot()
 

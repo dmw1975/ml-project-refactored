@@ -198,4 +198,34 @@ class ElasticNetAdapter(ModelData):
         Returns:
             The raw model data dictionary
         """
+
+    def get_model_type(self) -> str:
+        """Get model type."""
+        return "ElasticNet"
+    
+    def get_dataset_name(self) -> str:
+        """Get dataset name from model name."""
+        if hasattr(self, 'model_name') and self.model_name:
+            # Extract dataset from model name
+            parts = self.model_name.split('_')
+            
+            # Special handling for ElasticNet models with "LR" prefix
+            # e.g., "ElasticNet_LR_Base_basic" -> "Base"
+            if len(parts) >= 3 and parts[0] == 'ElasticNet' and parts[1] == 'LR':
+                # Skip the "LR" part
+                if len(parts) >= 4 and parts[3] == 'Random':
+                    return f"{parts[2]}_{parts[3]}"
+                else:
+                    return parts[2]
+            # Standard case for other models
+            elif len(parts) >= 2:
+                # Handle cases like Base, Yeo, Base_Random, Yeo_Random
+                if len(parts) >= 3 and parts[2] == 'Random':
+                    return f"{parts[1]}_{parts[2]}"
+                else:
+                    return parts[1]
+        return "Unknown"
+    
+    def get_raw_model_data(self) -> dict:
+        """Get raw model data dictionary."""
         return self.model_data

@@ -82,8 +82,9 @@ class MetricsTable(ComparativeViz):
         table_data = metrics_df[['Model'] + available_metrics].copy()
         
         # Create figure with better proportions - calculate proper height based on number of rows
-        # Reduce overall height by using a tighter factor
-        fig_height = max(6, min(20, len(table_data) * 0.3 + 1.5))  # Reduced height
+        # Ensure adequate height for all rows - increase factor for many models
+        # With 36 models + header + title, we need about 0.5 units per row
+        fig_height = max(10, len(table_data) * 0.5 + 3)  # Increased height factor for 36+ models
         fig_width = 14  # Fixed reasonable width
         
         # Create figure with minimal margins
@@ -214,13 +215,13 @@ class MetricsTable(ComparativeViz):
                 cell.set_edgecolor('gray')
         
         # Scale table to be more compact and fill the figure appropriately
-        # Use a smaller vertical scale to reduce empty space
-        table.scale(1.0, 1.05)
+        # Use appropriate scale to fit all rows - increased for better spacing
+        table.scale(1.0, 1.3)
         
         # No separate title needed as it's part of the table
         
-        # Tighter layout with minimal margins since title is in the table
-        plt.tight_layout(rect=[0.02, 0.02, 0.98, 0.98])
+        # Adjust layout with better margins to prevent cutoff
+        plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.99])
         
         # Save figure if requested
         if self.config.get('save', True):

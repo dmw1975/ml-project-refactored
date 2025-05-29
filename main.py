@@ -37,6 +37,10 @@ def parse_args():
     parser.add_argument('--train-linear', action='store_true', help='Train linear regression models')
     parser.add_argument('--train-linear-elasticnet', action='store_true', 
                         help='Train linear models with optimal ElasticNet parameters')
+    parser.add_argument('--optimize-elasticnet', type=int, metavar='N',
+                        help='Optimize ElasticNet with Optuna using N trials (default: 100)')
+    parser.add_argument('--elasticnet-grid', action='store_true',
+                        help='Use grid search instead of Optuna for ElasticNet (legacy)')
     parser.add_argument('--importance', action='store_true', help='Analyze feature importance')
     parser.add_argument('--datasets', nargs='+', default=['all'], 
                         help='Datasets to use (e.g., LR_Base LR_Yeo LR_Base_Random LR_Yeo_Random)')
@@ -174,7 +178,21 @@ def main():
                 print("\nTraining ElasticNet models...")
                 step_start = time.time()
                 from models.elastic_net import train_elasticnet_models
-                elastic_models = train_elasticnet_models(datasets=args.datasets)
+                
+                # Determine if using Optuna or grid search
+                use_optuna = not args.elasticnet_grid
+                n_trials = args.optimize_elasticnet if args.optimize_elasticnet else 100
+                
+                if use_optuna:
+                    print(f"  🎯 Using Optuna optimization with {n_trials} trials")
+                else:
+                    print("  📊 Using grid search optimization (legacy)")
+                
+                elastic_models = train_elasticnet_models(
+                    datasets=args.datasets,
+                    use_optuna=use_optuna,
+                    n_trials=n_trials
+                )
                 step_times["ElasticNet Training"] = time.time() - step_start
             else:
                 print("\n⏭️  Skipping ElasticNet training - using existing models")
@@ -223,30 +241,24 @@ def main():
                     viz.create_all_residual_plots()
                 except Exception as e:
                     print(f"Error creating residual plots: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy residual plots...")
-                    from visualization.create_residual_plots import create_all_residual_plots
-                    create_all_residual_plots()
+                    import traceback
+                    traceback.print_exc()
                 
                 try:
                     print("Creating model comparison visualizations...")
                     viz.create_model_comparison_plot(model_list)
                 except Exception as e:
                     print(f"Error creating model comparison: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy model comparison...")
-                    from visualization.metrics_plots import plot_model_comparison
-                    plot_model_comparison()
+                    import traceback
+                    traceback.print_exc()
                 
                 try:
                     print("Creating metrics summary table...")
                     viz.create_metrics_table(model_list)
                 except Exception as e:
                     print(f"Error creating metrics table: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy metrics table...")
-                    from visualization.metrics_plots import plot_metrics_summary_table
-                    plot_metrics_summary_table()
+                    import traceback
+                    traceback.print_exc()
                 
                 try:
                     print("Creating feature importance visualizations...")
@@ -254,11 +266,8 @@ def main():
                         viz.create_feature_importance_plot(model)
                 except Exception as e:
                     print(f"Error creating feature importance plots: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy feature importance plots...")
-                    from visualization.feature_plots import plot_top_features, plot_feature_importance_by_model
-                    plot_top_features()
-                    plot_feature_importance_by_model()
+                    import traceback
+                    traceback.print_exc()
                 
                 try:
                     print("Creating statistical test visualizations...")
@@ -310,6 +319,7 @@ def main():
                         from visualization_new.adapters.elasticnet_adapter import ElasticNetAdapter
                         from visualization_new.core.registry import register_adapter
                         from visualization_new.plots.features import plot_feature_importance_comparison
+                        from pathlib import Path
                         import os
                         
                         # Register ElasticNet adapter if not already registered
@@ -359,6 +369,36 @@ def main():
                         # Create feature importance comparisons
                         plot_feature_importance_comparison(adapters, feature_config)
                         
+                        # Generate Optuna visualizations if available
+                        optuna_models = {name: model for name, model in elasticnet_models.items() 
+                                       if 'optuna' in name and 'study' in model}
+                        
+                        if optuna_models:
+                            print("Generating ElasticNet Optuna visualizations...")
+                            from visualization_new.plots.optimization import (
+                                plot_optimization_history, plot_param_importance, plot_contour
+                            )
+                            
+                            for model_name, model_data in optuna_models.items():
+                                study = model_data.get('study')
+                                if study:
+                                    print(f"  Creating Optuna plots for {model_name}...")
+                                    
+                                    # Optimization history
+                                    hist_path = plot_optimization_history(study, perf_config, model_name)
+                                    if hist_path:
+                                        print(f"    ✓ Optimization history: {Path(hist_path).name}")
+                                    
+                                    # Parameter importance
+                                    param_path = plot_param_importance(study, perf_config, model_name)
+                                    if param_path:
+                                        print(f"    ✓ Parameter importance: {Path(param_path).name}")
+                                    
+                                    # Contour plot
+                                    contour_path = plot_contour(study, perf_config, model_name)
+                                    if contour_path:
+                                        print(f"    ✓ Contour plot: {Path(contour_path).name}")
+                        
                         # Create hyperparameter comparisons (one for each important parameter for ElasticNet)
                         for param in ['alpha', 'l1_ratio']:
                             try:
@@ -395,10 +435,8 @@ def main():
                         print("No ElasticNet models found.")
                 except Exception as e:
                     print(f"Error creating ElasticNet visualizations: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy ElasticNet visualizations...")
-                    from visualization.elasticnet_plots import plot_elasticnet_feature_importance
-                    plot_elasticnet_feature_importance()
+                    import traceback
+                    traceback.print_exc()
                 
                 # LightGBM specific visualization
                 try:
@@ -449,10 +487,8 @@ def main():
                         print("No LightGBM models found.")
                 except Exception as e:
                     print(f"Error creating LightGBM visualizations: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy LightGBM visualizations...")
-                    from visualization.lightgbm_plots import plot_lightgbm_feature_importance
-                    plot_lightgbm_feature_importance()
+                    import traceback
+                    traceback.print_exc()
                 
                 # Dataset comparison visualizations
                 try:
@@ -460,10 +496,8 @@ def main():
                     viz.plots.dataset_comparison.create_all_dataset_comparisons()
                 except Exception as e:
                     print(f"Error creating dataset comparisons: {e}")
-                    # Fallback to legacy visualization if needed
-                    print("Falling back to legacy dataset comparisons...")
-                    from visualization.dataset_comparison import create_all_dataset_comparisons
-                    create_all_dataset_comparisons()
+                    import traceback
+                    traceback.print_exc()
                 
                 # Create cross-model feature importance comparisons by dataset
                 try:
@@ -486,13 +520,36 @@ def main():
                 # Add baseline comparison visualizations
                 try:
                     print("\nCreating baseline comparison visualizations...")
-                    from visualization_new.plots.baselines import visualize_all_baseline_comparisons
+                    from visualization_new.plots.baselines import visualize_all_baseline_comparisons, create_metric_baseline_comparison
+                    from pathlib import Path
                     
+                    # Create consolidated plots
                     baseline_figures = visualize_all_baseline_comparisons(create_individual_plots=False)
                     if baseline_figures:
                         print("Baseline comparison visualizations created successfully.")
+                    
+                    # Also create individual metric baseline comparison plots
+                    baseline_data_path = settings.METRICS_DIR / "baseline_comparison.csv"
+                    if baseline_data_path.exists():
+                        output_dir = settings.VISUALIZATION_DIR / "baselines"
+                        output_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        # Create plots for each metric
+                        for metric in ['RMSE', 'MAE', 'R²']:
+                            try:
+                                output_path = output_dir / f"baseline_comparison_{metric}.png"
+                                create_metric_baseline_comparison(
+                                    baseline_data_path=str(baseline_data_path),
+                                    output_path=str(output_path),
+                                    metric=metric,
+                                    baseline_type='Random'
+                                )
+                                print(f"  Created baseline comparison plot for {metric}")
+                            except Exception as e:
+                                print(f"  Error creating baseline comparison for {metric}: {e}")
                     else:
-                        print("No baseline comparison visualizations were created.")
+                        print("No baseline comparison data found - run baseline evaluation first")
+                        
                 except Exception as e:
                     print(f"Error creating baseline comparison visualizations: {e}")
                 
@@ -500,28 +557,10 @@ def main():
                 step_times["New Visualization"] = time.time() - step_start
             except Exception as e:
                 print(f"Error in visualization pipeline: {e}")
-                print("Falling back to legacy visualization...")
+                import traceback
+                traceback.print_exc()
                 step_times["Failed New Visualization"] = time.time() - step_start
-                
-                # Import legacy visualization as a last resort
-                print("\nFalling back to legacy visualization module...")
-                from visualization.metrics_plots import plot_model_comparison, plot_residuals, plot_statistical_tests_filtered
-                from visualization.create_residual_plots import create_all_residual_plots
-                from visualization.feature_plots import plot_top_features, plot_feature_importance_by_model
-                from visualization.statistical_tests import visualize_statistical_tests
-                from visualization.lightgbm_plots import plot_lightgbm_feature_importance
-                
-                print("Creating model performance visualizations...")
-                plot_model_comparison()
-                create_all_residual_plots()
-                plot_residuals()
-                plot_statistical_tests_filtered()
-                visualize_statistical_tests()
-                
-                print("Creating feature importance visualizations...")
-                plot_top_features()
-                plot_feature_importance_by_model()
-                plot_lightgbm_feature_importance()
+                print("\nVisualization failed. Please check the error messages above.")
             
         if args.all or args.visualize_new:
             print("\nGenerating visualizations using new architecture...")
@@ -595,6 +634,71 @@ def main():
                 except Exception as e:
                     print(f"Error creating statistical test visualizations: {e}")
                     import traceback
+
+                # Generate SHAP visualizations for tree models
+                try:
+                    print("Creating SHAP visualizations...")
+                    # Check if SHAP script exists
+                    shap_script = Path("generate_shap_visualizations.py")
+                    if shap_script.exists():
+                        import subprocess
+                        result = subprocess.run([sys.executable, str(shap_script)], 
+                                              capture_output=True, text=True)
+                        if result.returncode == 0:
+                            print("SHAP visualizations created successfully.")
+                        else:
+                            print(f"Error creating SHAP visualizations: {result.stderr}")
+                    else:
+                        print("SHAP visualization script not found. Skipping.")
+                except Exception as e:
+                    print(f"Error creating SHAP visualizations: {e}")
+                
+                # Generate CV distribution plots
+                try:
+                    print("Creating CV distribution plots...")
+                    from visualization_new.plots.cv_distributions import plot_cv_distributions
+                    
+                    # Filter models with CV data
+                    cv_models = []
+                    for model_data in model_list:
+                        if isinstance(model_data, dict) and ('cv_scores' in model_data or 
+                                                            'cv_fold_scores' in model_data or
+                                                            'cv_mean' in model_data):
+                            cv_models.append(model_data)
+                    
+                    if cv_models:
+                        cv_config = {
+                            'save': True,
+                            'output_dir': settings.VISUALIZATION_DIR / "performance" / "cv_distributions",
+                            'dpi': 300,
+                            'format': 'png'
+                        }
+                        cv_figures = plot_cv_distributions(cv_models, cv_config)
+                        print(f"Created {len(cv_figures)} CV distribution plots.")
+                    else:
+                        print("No models with CV data found. Skipping CV distribution plots.")
+                except Exception as e:
+                    print(f"Error creating CV distribution plots: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
+                # Generate performance plots for CatBoost and XGBoost
+                try:
+                    print("Creating performance optimization plots...")
+                    perf_script = Path(__file__).parent / "generate_missing_performance_plots.py"
+                    if perf_script.exists():
+                        import subprocess
+                        result = subprocess.run([sys.executable, str(perf_script)], 
+                                              capture_output=True, text=True)
+                        if result.returncode == 0:
+                            print("Performance optimization plots created successfully.")
+                        else:
+                            print(f"Error creating performance plots: {result.stderr}")
+                    else:
+                        print("Performance plot generation script not found. Skipping.")
+                except Exception as e:
+                    print(f"Error creating performance optimization plots: {e}")
+                    import traceback
                     traceback.print_exc()
                 
                 print("New architecture visualizations complete.")
@@ -624,10 +728,8 @@ def main():
                 register_adapter('xgboost', XGBoostAdapter)
             except Exception as e:
                 print(f"Error importing new visualization modules for XGBoost: {str(e)}")
-                print("Falling back to deprecated visualization...")
+                print("XGBoost visualization modules not available.")
                 use_new_system = False
-                from visualization.xgboost_plots import visualize_xgboost_models
-                visualize_xgboost_models()
             
             if use_new_system:
                 try:
@@ -702,9 +804,7 @@ def main():
                         print(f"XGBoost visualizations completed successfully using new architecture.")
                 except Exception as e:
                     print(f"Error using new visualization architecture for XGBoost: {str(e)}")
-                    print("Falling back to deprecated visualization...")
-                    from visualization.xgboost_plots import visualize_xgboost_models
-                    visualize_xgboost_models()
+                    print("XGBoost visualization failed. Please check the error messages above.")
             
         if args.all or args.train_lightgbm or args.optimize_lightgbm:
             if should_retrain_all or not args.all or args.force_retune:
@@ -730,8 +830,7 @@ def main():
         if args.all or args.visualize_lightgbm:
             print("\nGenerating LightGBM visualizations...")
             
-            # Import the fallback option first
-            from visualization.lightgbm_plots import visualize_lightgbm_models
+            # LightGBM visualization using new architecture
             
             # Try to use the new system, but fall back to the old if there are issues
             use_new_system = True
@@ -754,9 +853,8 @@ def main():
                 register_adapter('lightgbm', LightGBMAdapter)
             except Exception as e:
                 print(f"Error importing new visualization modules for LightGBM: {str(e)}")
-                print("Falling back to deprecated visualization...")
+                print("LightGBM visualization failed. Please check the error messages above.")
                 use_new_system = False
-                visualize_lightgbm_models()
             
             if use_new_system:
                 try:
@@ -849,6 +947,27 @@ def main():
                     print("Falling back to deprecated visualization...")
                     visualize_lightgbm_models()
             
+        if args.all or args.train_lightgbm or args.optimize_lightgbm:
+            if should_retrain_all or not args.all or args.force_retune:
+                print("\nTraining LightGBM models...")
+                step_start = time.time()
+                
+                if args.use_one_hot:
+                    print("  🔢 Using one-hot encoded LightGBM implementation (legacy mode)")
+                    from models.lightgbm_categorical import train_lightgbm_models
+                    # Determine number of trials
+                    n_trials = args.optimize_lightgbm if args.optimize_lightgbm else settings.LIGHTGBM_PARAMS.get('n_trials', 50)
+                    lightgbm_models = train_lightgbm_models(datasets=args.datasets, n_trials=n_trials, force_retune=args.force_retune)
+                else:
+                    print("  🌳 Using native categorical LightGBM implementation (default)")
+                    from models.lightgbm_categorical import train_lightgbm_categorical_models
+                    lightgbm_models = train_lightgbm_categorical_models(datasets=args.datasets)
+                
+                step_times["LightGBM Training"] = time.time() - step_start
+            else:
+                print("\n⏭️  Skipping LightGBM training - using existing models")
+                step_times["LightGBM Training"] = 0
+            
         if args.all or args.train_catboost or args.optimize_catboost:
             if should_retrain_all or not args.all or args.force_retune:
                 print("\nTraining CatBoost models...")
@@ -862,8 +981,8 @@ def main():
                     catboost_models = train_catboost_models(datasets=args.datasets, n_trials=n_trials)
                 else:
                     print("  🌳 Using native categorical CatBoost implementation (default)")
-                    from models.catboost_categorical import run_all_catboost_categorical
-                    catboost_models = run_all_catboost_categorical()
+                    from models.catboost_categorical import train_catboost_categorical_models
+                    catboost_models = train_catboost_categorical_models(datasets=args.datasets)
                 
                 step_times["CatBoost Training"] = time.time() - step_start
             else:
@@ -873,8 +992,7 @@ def main():
         if args.all or args.visualize_catboost:
             print("\nGenerating CatBoost visualizations...")
             
-            # Import the fallback option first
-            from visualization.catboost_plots import visualize_catboost_models
+            # CatBoost visualization using new architecture
             
             # Try to use the new system, but fall back to the old if there are issues
             use_new_system = True
@@ -897,9 +1015,8 @@ def main():
                 register_adapter('catboost', CatBoostAdapter)
             except Exception as e:
                 print(f"Error importing new visualization modules: {str(e)}")
-                print("Falling back to deprecated visualization...")
+                print("CatBoost visualization failed. Please check the error messages above.")
                 use_new_system = False
-                visualize_catboost_models()
             
             if use_new_system:
                 try:
@@ -988,8 +1105,7 @@ def main():
                         print(f"CatBoost visualizations completed successfully using new architecture.")
                 except Exception as e:
                     print(f"Error using new visualization architecture: {str(e)}")
-                    print("Falling back to deprecated visualization...")
-                    visualize_catboost_models()
+                    print("CatBoost visualization failed. Continuing...")
                 
         # Visualizations using new architecture are handled in a consolidated block above
 
@@ -1018,9 +1134,8 @@ def main():
         print("\nGenerating sector-specific visualizations...")
         
         # Legacy sector visualization
-        print("Using legacy visualization module...")
-        from visualization.sector_plots import visualize_sector_models
-        visualize_sector_models(run_all=True)
+        print("\nSector visualizations are not available in the new architecture yet.")
+        print("Skipping sector visualizations...")
     
     if args.all_sector or args.visualize_sector_new or args.all or (args.all and args.visualize_new):
         print("\nGenerating sector visualizations using new architecture...")
@@ -1135,6 +1250,91 @@ def run_additional_visualizations():
             print("\nGenerating SHAP visualizations...")
             from generate_shap_visualizations import main as generate_shap_viz
             generate_shap_viz()
+            
+            # Add improved CatBoost SHAP visualizations for categorical features
+            print("\nGenerating improved CatBoost SHAP visualizations for categorical features...")
+            from improved_catboost_shap_categorical import (
+                create_categorical_shap_plot, create_mixed_shap_summary, 
+                identify_categorical_features
+            )
+            import shap
+            import pickle
+            from pathlib import Path
+            import numpy as np
+            
+            # Load CatBoost models
+            catboost_path = settings.MODEL_DIR / "catboost_models.pkl"
+            if catboost_path.exists():
+                with open(catboost_path, 'rb') as f:
+                    catboost_models = pickle.load(f)
+                
+                # Process the best performing CatBoost model (prefer optuna)
+                best_model_name = None
+                best_model_data = None
+                for name, data in catboost_models.items():
+                    if 'optuna' in name and 'model' in data and 'X_test' in data:
+                        best_model_name = name
+                        best_model_data = data
+                        break
+                
+                # Fallback to any available model
+                if best_model_data is None:
+                    for name, data in catboost_models.items():
+                        if 'model' in data and 'X_test' in data:
+                            best_model_name = name
+                            best_model_data = data
+                            break
+                
+                if best_model_data:
+                    print(f"  Using {best_model_name} for improved visualizations")
+                    
+                    # Get test data sample
+                    X_test = best_model_data['X_test']
+                    sample_size = min(100, len(X_test))
+                    X_sample = X_test.sample(sample_size, random_state=42) if len(X_test) > sample_size else X_test
+                    
+                    # Calculate SHAP values
+                    model = best_model_data['model']
+                    explainer = shap.TreeExplainer(model)
+                    shap_values = explainer.shap_values(X_sample)
+                    
+                    # Identify categorical features
+                    categorical_features = identify_categorical_features(X_sample, model)
+                    print(f"  Identified {len(categorical_features)} categorical features: {categorical_features[:5]}...")
+                    
+                    # Create output directory
+                    shap_dir = Path(settings.OUTPUT_DIR) / "visualizations" / "shap" / "catboost_improved"
+                    shap_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Create mixed summary plot
+                    mixed_path = shap_dir / "catboost_mixed_shap_summary.png"
+                    create_mixed_shap_summary(shap_values, X_sample, categorical_features, mixed_path)
+                    print(f"  Created mixed SHAP summary: {mixed_path.name}")
+                    
+                    # Create individual categorical feature plots for top categorical features
+                    if categorical_features:
+                        # Calculate importance for categorical features
+                        cat_importance = {}
+                        for cat_feat in categorical_features:
+                            if cat_feat in X_sample.columns:
+                                feat_idx = list(X_sample.columns).index(cat_feat)
+                                cat_importance[cat_feat] = np.abs(shap_values[:, feat_idx]).mean()
+                        
+                        # Get top 5 most important categorical features
+                        top_categorical = sorted(cat_importance.items(), key=lambda x: x[1], reverse=True)[:5]
+                        
+                        print(f"  Creating plots for top {len(top_categorical)} categorical features...")
+                        for feat_name, importance in top_categorical:
+                            cat_plot_path = shap_dir / f"catboost_categorical_{feat_name.replace('/', '_')}.png"
+                            create_categorical_shap_plot(shap_values, X_sample, feat_name, cat_plot_path)
+                            print(f"    - {feat_name}: {cat_plot_path.name}")
+                    
+                    print("  Improved CatBoost SHAP visualizations complete!")
+                else:
+                    print("  No suitable CatBoost model found for improved visualizations")
+            else:
+                print("  CatBoost models not found, skipping improved visualizations")
+                
         except Exception as e:
             print(f"Warning: SHAP visualization generation partially failed: {e}")
             print("Some SHAP plots may have been created successfully. Check outputs/visualizations/shap/")

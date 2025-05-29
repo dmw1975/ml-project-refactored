@@ -18,7 +18,9 @@ def load_features_data():
 def load_scores_data():
     """Load the ESG scores dataset."""
     file_path = settings.RAW_DATA_DIR / settings.DATASET_FILES["scores"]
-    return pd.read_csv(file_path, index_col='issuer_name')
+    df = pd.read_csv(file_path, index_col='issuer_name')
+    # Return as Series, not DataFrame
+    return df['esg_score']
 
 def get_base_and_yeo_features(feature_df):
     """Extract Base and Yeo-Johnson transformed features."""

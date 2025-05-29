@@ -20,6 +20,11 @@ from visualization_new.plots.metrics import (
     plot_model_comparison
 )
 
+from visualization_new.plots.cv_distributions import (
+    plot_cv_distributions,
+    CVDistributionPlot
+)
+
 __all__ = [
     'plot_residuals',
     'plot_all_residuals',
@@ -27,5 +32,7 @@ __all__ = [
     'plot_feature_importance_comparison',
     'plot_metrics',
     'plot_metrics_table',
-    'plot_model_comparison'
+    'plot_model_comparison',
+    'plot_cv_distributions',
+    'CVDistributionPlot'
 ]

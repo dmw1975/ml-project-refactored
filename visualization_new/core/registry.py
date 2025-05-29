@@ -26,7 +26,7 @@ def get_adapter_for_model(model_data: Dict[str, Any]) -> ModelData:
     Get adapter for model data.
     
     Args:
-        model_data: Model data dictionary
+        model_data: Model data dictionary or adapter instance
         
     Returns:
         ModelData: Adapter instance for the model data
@@ -34,6 +34,10 @@ def get_adapter_for_model(model_data: Dict[str, Any]) -> ModelData:
     Raises:
         ValueError: If no adapter is found for the model type
     """
+    # If it's already an adapter, return it
+    if hasattr(model_data, 'get_model_type'):
+        return model_data
+        
     # Try to determine model type
     model_type = None
     

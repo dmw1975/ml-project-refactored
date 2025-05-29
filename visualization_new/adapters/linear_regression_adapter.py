@@ -143,3 +143,25 @@ class LinearRegressionAdapter(ModelData):
                 metadata[key] = self.model_data[key]
         
         return metadata
+
+    def get_model_type(self) -> str:
+        """Get model type."""
+        return "Linear Regression"
+    
+    def get_dataset_name(self) -> str:
+        """Get dataset name from model name."""
+        if hasattr(self, 'model_name') and self.model_name:
+            # Extract dataset from model name (e.g., "XGBoost_Base_categorical_optuna" -> "Base")
+            parts = self.model_name.split('_')
+            if len(parts) >= 2:
+                # Handle cases like Base, Yeo, Base_Random, Yeo_Random
+                if len(parts) >= 3 and parts[2] == 'Random':
+                    return f"{parts[1]}_{parts[2]}"
+                else:
+                    return parts[1]
+        return "Unknown"
+    
+    def get_raw_model_data(self) -> dict:
+        """Get raw model data dictionary."""
+        return self.model_data
+        return metadata

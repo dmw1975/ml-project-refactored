@@ -32,6 +32,12 @@ from visualization_new.plots.statistical_tests import (
     visualize_statistical_tests
 )
 
+
+# Import CV distribution functions
+from visualization_new.plots.cv_distributions import (
+    plot_cv_distributions
+)
+
 __all__ = [
     'create_residual_plot',
     'create_feature_importance_plot',
@@ -46,4 +52,5 @@ __all__ = [
     'create_all_dataset_comparisons',
     'plot_statistical_tests',
     'visualize_statistical_tests'
+    'plot_cv_distributions',
 ]

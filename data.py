@@ -53,8 +53,12 @@ def load_scores_data():
         if path.exists():
             print(f"Loading scores from: {path}")
             scores_df = pd.read_csv(path)
-            # Assuming the score is in the first column
-            return scores_df.iloc[:, 0]
+            # Return the esg_score column as a Series
+            if 'esg_score' in scores_df.columns:
+                return scores_df['esg_score']
+            else:
+                # Fallback: assume the score is in the second column (index 1)
+                return scores_df.iloc[:, 1]
     
     # If we can't find the file, raise a helpful error
     raise FileNotFoundError(

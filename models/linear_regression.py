@@ -121,7 +121,9 @@ def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=
     print(f"  MAE : {mae:.4f}")
     print(f"  MSE : {mse:.4f}")
     print(f"  R²  : {r2:.4f}")
-    print(f"  Features used: {model.coef_.shape[0]}")
+    # Handle both 1D and 2D coefficient arrays
+    n_features = model.coef_.shape[-1] if model.coef_.ndim > 1 else len(model.coef_)
+    print(f"  Features used: {n_features}")
     
     # Return metrics and model
     return {
@@ -136,7 +138,7 @@ def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=
         'n_companies_test': len(X_test),
         'y_test': y_test,
         'y_pred': y_pred,
-        'n_features': model.coef_.shape[0]
+        'n_features': model.coef_.shape[-1] if model.coef_.ndim > 1 else len(model.coef_)
     }
 
 def train_all_models():
@@ -246,7 +248,7 @@ def train_all_models():
             'MSE': metrics['MSE'],
             'R2': metrics['R2'],
             'n_companies': metrics['n_companies'],
-            'n_features': metrics['model'].coef_.shape[0]  # Add feature count to metrics
+            'n_features': metrics['model'].coef_.shape[-1] if metrics['model'].coef_.ndim > 1 else len(metrics['model'].coef_)  # Add feature count to metrics
         }
         for name, metrics in model_results.items()
     ])
@@ -257,7 +259,8 @@ def train_all_models():
     # Print final feature counts used by each model
     print("\nFeature counts used by each model:")
     for name, metrics in model_results.items():
-        print(f"{name}: {metrics['model'].coef_.shape[0]} features")
+        n_features = metrics['model'].coef_.shape[-1] if metrics['model'].coef_.ndim > 1 else len(metrics['model'].coef_)
+        print(f"{name}: {n_features} features")
     
     print("\nLinear regression models trained and saved successfully.")
     return model_results

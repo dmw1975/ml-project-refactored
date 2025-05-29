@@ -15,7 +15,7 @@ sys.path.append(str(project_root))
 from config import settings
 from data import load_features_data, get_base_and_yeo_features
 from utils import io
-from visualization.style import setup_visualization_style, save_figure
+from visualization_new.core.style import setup_visualization_style, save_figure
 
 def calculate_vif(X):
     """
