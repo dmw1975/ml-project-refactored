@@ -14,8 +14,8 @@ project_root = Path(__file__).parent.absolute()
 sys.path.append(str(project_root))
 
 # Import the enhanced archive functionality
-from archive_outputs_enhanced import archive_directory, get_directory_stats, format_size
-from config import settings
+from scripts.archive.archive_outputs_enhanced import archive_directory, get_directory_stats, format_size
+from src.config import settings
 
 
 def archive_outputs_before_amendments():
@@ -53,19 +53,19 @@ def archive_outputs_before_amendments():
         print("🧹 Outputs directory has been cleaned - ready for fresh results!")
         print("\n🔄 Next steps:")
         print("  1. Run your amended pipeline: python main.py --all")
-        print("  2. Create post-amendment archive: python archive_outputs_enhanced.py --full")
+        print("  2. Create post-amendment archive: python scripts/archive/archive_outputs_enhanced.py --full")
         print("  3. Compare the changes:")
-        print(f"     python archive_outputs_enhanced.py --compare \"{archive_dir}\" \"<post_amendment_archive>\"")
+        print(f"     python scripts/archive/archive_outputs_enhanced.py --compare \"{archive_dir}\" \"<post_amendment_archive>\"")
         
         # Create a convenience script for comparison
         comparison_script = f"""#!/bin/bash
 # Convenience script to compare pre and post amendment outputs
 
 echo "Creating post-amendment archive..."
-python archive_outputs_enhanced.py --full --name outputs_post_amendment_{timestamp}
+python scripts/archive/archive_outputs_enhanced.py --full --name outputs_post_amendment_{timestamp}
 
 echo "\\nComparing archives..."
-python archive_outputs_enhanced.py --compare "{archive_dir}" "outputs_post_amendment_{timestamp}"
+python scripts/archive/archive_outputs_enhanced.py --compare "{archive_dir}" "outputs_post_amendment_{timestamp}"
 """
         
         script_path = project_root / f"compare_amendments_{timestamp}.sh"

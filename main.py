@@ -3,12 +3,59 @@
 import argparse
 from pathlib import Path
 import sys
+import logging
+from datetime import datetime
+import time
+import os
 
 # Add the project directory to the path so we can import modules
 project_dir = Path(__file__).parent.absolute()
 sys.path.append(str(project_dir))
 
-from config import settings
+from src.config import settings
+
+# Set up logging
+def setup_logging(args):
+    """Set up logging configuration based on command arguments."""
+    # Create logs directory if it doesn't exist
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+    
+    # Determine log file name based on arguments
+    cmd_parts = []
+    if args.train:
+        cmd_parts.append("train")
+    if args.train_linear:
+        cmd_parts.append("train_linear")
+    if args.evaluate:
+        cmd_parts.append("evaluate")
+    if args.visualize or args.visualize_new:
+        cmd_parts.append("visualize")
+    if args.all:
+        cmd_parts.append("all")
+    
+    cmd_str = "_".join(cmd_parts) if cmd_parts else "run"
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_filename = log_dir / f"main_{cmd_str}_{timestamp}.log"
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_filename),
+            logging.StreamHandler()  # Console output
+        ]
+    )
+    
+    # Log initial information
+    logging.info("="*60)
+    logging.info(f"ML Pipeline Started - Command: {cmd_str}")
+    logging.info(f"Log file: {log_filename}")
+    logging.info(f"Working directory: {os.getcwd()}")
+    logging.info("="*60)
+    
+    return log_filename
 
 def get_data_loading_strategy(use_one_hot):
     """Get the appropriate data loading strategy based on encoding preference."""
@@ -20,14 +67,14 @@ def get_data_loading_strategy(use_one_hot):
     
     # Use categorical data loading (default for tree models)
     try:
-        from data_categorical import load_tree_models_data, load_linear_models_data
+        from src.data.data_categorical import load_tree_models_data, load_linear_models_data
         return load_tree_models_data, load_linear_models_data
     except ImportError:
         print("⚠️  Categorical data module not found. Creating categorical datasets...")
         # Create categorical datasets if they don't exist
-        from create_categorical_datasets import main as create_datasets
+        from scripts.utilities.create_categorical_datasets import main as create_datasets
         create_datasets()
-        from data_categorical import load_tree_models_data, load_linear_models_data
+        from src.data.data_categorical import load_tree_models_data, load_linear_models_data
         return load_tree_models_data, load_linear_models_data
 
 def parse_args():
@@ -83,23 +130,36 @@ def parse_args():
 
 def main():
     """Main function."""
+    args = parse_args()
+    
+    # Set up logging first
+    log_filename = setup_logging(args)
+    
     # Start timing the execution
-    import time
-    import datetime
     start_time = time.time()
     
     # Dictionary to track execution time of each step
     step_times = {}
     
-    args = parse_args()
+    # Log parsed arguments
+    logging.info("Parsed arguments:")
+    for arg, value in vars(args).items():
+        logging.info(f"  {arg}: {value}")
     
     # Import settings
-    from config import settings
+    from src.config import settings
+    
+    # Helper function to log with timing
+    def log_step(message, level=logging.INFO):
+        """Log a message with elapsed time."""
+        elapsed = time.time() - start_time
+        logging.log(level, f"[{elapsed:.1f}s] {message}")
+        print(f"[{elapsed:.1f}s] {message}")
     
     # Handle check-studies flag first
     if args.check_studies:
         print("🔍 Checking existing Optuna studies...")
-        from utils.io import report_existing_studies
+        from src.utils.io import report_existing_studies
         report_existing_studies()
         return
     
@@ -126,7 +186,7 @@ def main():
         should_retrain_all = True
         if args.all and not args.force_retune:
             print("\n🔍 Checking for existing trained models across all algorithms...")
-            from utils.io import check_all_existing_models, prompt_consolidated_retrain
+            from src.utils.io import check_all_existing_models, prompt_consolidated_retrain
             
             all_existing_models = check_all_existing_models(datasets=args.datasets)
             if all_existing_models:
@@ -139,7 +199,7 @@ def main():
             if should_retrain_all or not args.all:
                 print("\nTraining linear regression models...")
                 step_start = time.time()
-                from models.linear_regression import train_all_models
+                from src.models.linear_regression import train_all_models
                 linear_models = train_all_models()
                 step_times["Linear Regression Training"] = time.time() - step_start
             else:
@@ -154,13 +214,13 @@ def main():
                 
                 if args.use_one_hot:
                     print("  🔢 Using one-hot encoded XGBoost implementation (legacy mode)")
-                    from models.xgboost_categorical import train_xgboost_models
+                    from src.models.xgboost_categorical import train_xgboost_models
                     # Determine number of trials
                     n_trials = args.optimize_xgboost if args.optimize_xgboost else settings.XGBOOST_PARAMS.get('n_trials', 50)
                     xgboost_models = train_xgboost_models(datasets=args.datasets, n_trials=n_trials, force_retune=args.force_retune)
                 else:
                     print("  🌳 Using native categorical XGBoost implementation (default)")
-                    from models.xgboost_categorical import train_xgboost_categorical_models
+                    from src.models.xgboost_categorical import train_xgboost_categorical_models
                     xgboost_models = train_xgboost_categorical_models(datasets=args.datasets)
                 
                 step_times["XGBoost Training"] = time.time() - step_start
@@ -170,14 +230,14 @@ def main():
         
         if args.train_linear_elasticnet:
             print("\nTraining linear models with optimal ElasticNet parameters...")
-            from models.linear_regression import train_linear_with_elasticnet_params
+            from src.models.linear_regression import train_linear_with_elasticnet_params
             linear_elasticnet_models = train_linear_with_elasticnet_params()
         
         if args.all or args.train:  # Make sure this matches your args
             if should_retrain_all or not args.all:
                 print("\nTraining ElasticNet models...")
                 step_start = time.time()
-                from models.elastic_net import train_elasticnet_models
+                from src.models.elastic_net import train_elasticnet_models
                 
                 # Determine if using Optuna or grid search
                 use_optuna = not args.elasticnet_grid
@@ -201,35 +261,51 @@ def main():
         if args.all or args.evaluate:
             print("\nEvaluating models...")
             step_start = time.time()
-            from evaluation.metrics import evaluate_models
+            from src.evaluation.metrics import evaluate_models
             eval_results = evaluate_models()
             step_times["Model Evaluation"] = time.time() - step_start
             
             print("\nAnalyzing feature importance...")
-            from evaluation.importance import analyze_feature_importance
+            from src.evaluation.importance import analyze_feature_importance
             importance_results = analyze_feature_importance(eval_results['all_models'])
         
         if args.importance:
             print("\nAnalyzing feature importance...")
-            from evaluation.importance import analyze_feature_importance
+            from src.evaluation.importance import analyze_feature_importance
             importance_results = analyze_feature_importance()
             
         if args.all or args.visualize or args.visualize_new:
-            print("\nGenerating visualizations using unified architecture...")
+            print("\nGenerating comprehensive visualizations...")
             step_start = time.time()
             
-            # Import from visualization_new architecture
-            import visualization_new as viz
-            from visualization_new.utils.io import load_all_models
-            
+            # Use the comprehensive visualization pipeline
             try:
-                # Register LightGBM adapter if not already registered
+                from src.visualization import run_comprehensive_visualization_pipeline
+                
+                # Run the comprehensive pipeline that includes ALL visualizations
+                visualizations = run_comprehensive_visualization_pipeline()
+                
+                print("\nAll visualizations generated successfully!")
+                step_times["Comprehensive Visualization"] = time.time() - step_start
+                
+            except Exception as e:
+                print(f"Error in comprehensive visualization pipeline: {e}")
+                import traceback
+                traceback.print_exc()
+                step_times["Failed Visualization"] = time.time() - step_start
+                
+                # If comprehensive pipeline fails, try to run individual components
+                print("\nAttempting to run individual visualization components...")
+                import src.visualization as viz
+                from src.visualization.utils.io import load_all_models
+                
                 try:
-                    from visualization_new.adapters.lightgbm_adapter import LightGBMAdapter
-                    from visualization_new.core.registry import register_adapter
+                    # Register adapters
+                    from src.visualization.adapters.lightgbm_adapter import LightGBMAdapter
+                    from src.visualization.core.registry import register_adapter
                     register_adapter('lightgbm', LightGBMAdapter)
-                except Exception as e:
-                    print(f"Warning: Could not register LightGBM adapter: {e}")
+                except:
+                    pass
                 
                 # Load all models once
                 models = load_all_models()
@@ -285,7 +361,7 @@ def main():
                         output_dir.mkdir(parents=True, exist_ok=True)
                         
                         # Create config with explicit output directory
-                        from visualization_new.core.interfaces import VisualizationConfig
+                        from src.visualization.core.interfaces import VisualizationConfig
                         config = VisualizationConfig(
                             output_dir=output_dir,
                             format="png",
@@ -312,13 +388,13 @@ def main():
                     
                     if elasticnet_models:
                         # Import necessary modules for ElasticNet visualization
-                        from visualization_new.viz_factory import (
+                        from src.visualization.viz_factory import (
                             visualize_model, create_hyperparameter_comparison,
                             create_basic_vs_optuna_comparison, create_optuna_improvement_plot
                         )
-                        from visualization_new.adapters.elasticnet_adapter import ElasticNetAdapter
-                        from visualization_new.core.registry import register_adapter
-                        from visualization_new.plots.features import plot_feature_importance_comparison
+                        from src.visualization.adapters.elasticnet_adapter import ElasticNetAdapter
+                        from src.visualization.core.registry import register_adapter
+                        from src.visualization.plots.features import plot_feature_importance_comparison
                         from pathlib import Path
                         import os
                         
@@ -348,7 +424,7 @@ def main():
                         os.makedirs(features_dir, exist_ok=True)
                         
                         # Configuration for performance visualizations
-                        from visualization_new.core.interfaces import VisualizationConfig
+                        from src.visualization.core.interfaces import VisualizationConfig
                         perf_config = VisualizationConfig(
                             output_dir=perf_dir,
                             format="png",
@@ -375,7 +451,7 @@ def main():
                         
                         if optuna_models:
                             print("Generating ElasticNet Optuna visualizations...")
-                            from visualization_new.plots.optimization import (
+                            from src.visualization.plots.optimization import (
                                 plot_optimization_history, plot_param_importance, plot_contour
                             )
                             
@@ -445,9 +521,9 @@ def main():
                                      if 'lightgbm' in name.lower()}
                     
                     if lightgbm_models:
-                        from visualization_new.viz_factory import visualize_model
-                        from visualization_new.adapters.lightgbm_adapter import LightGBMAdapter
-                        from visualization_new.plots.features import plot_feature_importance_comparison
+                        from src.visualization.viz_factory import visualize_model
+                        from src.visualization.adapters.lightgbm_adapter import LightGBMAdapter
+                        from src.visualization.plots.features import plot_feature_importance_comparison
                         import os
                         
                         # Visualize each LightGBM model
@@ -470,7 +546,7 @@ def main():
                         os.makedirs(features_dir, exist_ok=True)
                         
                         # Create config for feature importance comparison
-                        from visualization_new.core.interfaces import VisualizationConfig
+                        from src.visualization.core.interfaces import VisualizationConfig
                         importance_config = VisualizationConfig(
                             output_dir=features_dir,
                             format="png",
@@ -502,7 +578,7 @@ def main():
                 # Create cross-model feature importance comparisons by dataset
                 try:
                     print("\nCreating cross-model feature importance comparisons by dataset...")
-                    from visualization_new.viz_factory import create_cross_model_feature_importance_by_dataset
+                    from src.visualization.viz_factory import create_cross_model_feature_importance_by_dataset
                     
                     dataset_paths = create_cross_model_feature_importance_by_dataset(
                         format='png',
@@ -520,7 +596,7 @@ def main():
                 # Add baseline comparison visualizations
                 try:
                     print("\nCreating baseline comparison visualizations...")
-                    from visualization_new.plots.baselines import visualize_all_baseline_comparisons, create_metric_baseline_comparison
+                    from src.visualization.plots.baselines import visualize_all_baseline_comparisons, create_metric_baseline_comparison
                     from pathlib import Path
                     
                     # Create consolidated plots
@@ -534,8 +610,12 @@ def main():
                         output_dir = settings.VISUALIZATION_DIR / "baselines"
                         output_dir.mkdir(parents=True, exist_ok=True)
                         
-                        # Create plots for each metric
-                        for metric in ['RMSE', 'MAE', 'R²']:
+                        # Create plots for each metric and baseline type
+                        metrics = ['RMSE', 'MAE', 'R²']
+                        baseline_types = ['Random', 'Mean', 'Median']
+                        
+                        for metric in metrics:
+                            # Create plot for Random baseline with original filename for backward compatibility
                             try:
                                 output_path = output_dir / f"baseline_comparison_{metric}.png"
                                 create_metric_baseline_comparison(
@@ -547,6 +627,20 @@ def main():
                                 print(f"  Created baseline comparison plot for {metric}")
                             except Exception as e:
                                 print(f"  Error creating baseline comparison for {metric}: {e}")
+                            
+                            # Create plots for all baseline types with type in filename
+                            for baseline_type in baseline_types:
+                                try:
+                                    output_path = output_dir / f"baseline_comparison_{metric}_{baseline_type.lower()}.png"
+                                    create_metric_baseline_comparison(
+                                        baseline_data_path=str(baseline_data_path),
+                                        output_path=str(output_path),
+                                        metric=metric,
+                                        baseline_type=baseline_type
+                                    )
+                                    print(f"  Created {baseline_type} baseline comparison plot for {metric}")
+                                except Exception as e:
+                                    print(f"  Error creating {baseline_type} baseline comparison for {metric}: {e}")
                     else:
                         print("No baseline comparison data found - run baseline evaluation first")
                         
@@ -565,8 +659,8 @@ def main():
         if args.all or args.visualize_new:
             print("\nGenerating visualizations using new architecture...")
             # Import from new visualization architecture
-            import visualization_new as viz
-            from visualization_new.utils.io import load_all_models
+            import src.visualization as viz
+            from src.visualization.utils.io import load_all_models
             
             try:
                 # Load all models once
@@ -616,7 +710,7 @@ def main():
                         output_dir.mkdir(parents=True, exist_ok=True)
                         
                         # Create config with explicit output directory
-                        from visualization_new.core.interfaces import VisualizationConfig
+                        from src.visualization.core.interfaces import VisualizationConfig
                         config = VisualizationConfig(
                             output_dir=output_dir,
                             format="png",
@@ -656,7 +750,7 @@ def main():
                 # Generate CV distribution plots
                 try:
                     print("Creating CV distribution plots...")
-                    from visualization_new.plots.cv_distributions import plot_cv_distributions
+                    from src.visualization.plots.cv_distributions import plot_cv_distributions
                     
                     # Filter models with CV data
                     cv_models = []
@@ -714,14 +808,14 @@ def main():
             
             try:
                 # Import new architecture components
-                from visualization_new.viz_factory import (
+                from src.visualization.viz_factory import (
                     visualize_model, create_optimization_history_plot, create_param_importance_plot,
                     create_hyperparameter_comparison, create_basic_vs_optuna_comparison,
                     create_optuna_improvement_plot
                 )
-                from visualization_new.adapters.xgboost_adapter import XGBoostAdapter
-                from visualization_new.core.registry import register_adapter
-                from visualization_new.utils.io import load_all_models
+                from src.visualization.adapters.xgboost_adapter import XGBoostAdapter
+                from src.visualization.core.registry import register_adapter
+                from src.visualization.utils.io import load_all_models
                 import os
                 
                 # Register XGBoost adapter
@@ -756,12 +850,12 @@ def main():
                         model_data_list = list(xgboost_models.values())
                         
                         # Set up output directory for performance plots
-                        from config import settings
+                        from src.config import settings
                         perf_dir = settings.VISUALIZATION_DIR / "performance" / "xgboost"
                         os.makedirs(perf_dir, exist_ok=True)
                         
                         # Configuration
-                        from visualization_new.core.interfaces import VisualizationConfig
+                        from src.visualization.core.interfaces import VisualizationConfig
                         config = VisualizationConfig(
                             output_dir=perf_dir,
                             format="png",
@@ -813,13 +907,13 @@ def main():
                 
                 if args.use_one_hot:
                     print("  🔢 Using one-hot encoded LightGBM implementation (legacy mode)")
-                    from models.lightgbm_categorical import train_lightgbm_models
+                    from src.models.lightgbm_categorical import train_lightgbm_models
                     # Determine number of trials
                     n_trials = args.optimize_lightgbm if args.optimize_lightgbm else settings.LIGHTGBM_PARAMS.get('n_trials', 50)
                     lightgbm_models = train_lightgbm_models(datasets=args.datasets, n_trials=n_trials)
                 else:
                     print("  🌳 Using native categorical LightGBM implementation (default)")
-                    from models.lightgbm_categorical import train_lightgbm_categorical_models
+                    from src.models.lightgbm_categorical import train_lightgbm_categorical_models
                     lightgbm_models = train_lightgbm_categorical_models(datasets=args.datasets)
                 
                 step_times["LightGBM Training"] = time.time() - step_start
@@ -837,16 +931,16 @@ def main():
             
             try:
                 # Import new architecture components
-                from visualization_new.viz_factory import (
+                from src.visualization.viz_factory import (
                     visualize_model, create_optimization_history_plot, create_param_importance_plot,
                     create_hyperparameter_comparison, create_basic_vs_optuna_comparison,
                     create_optuna_improvement_plot
                 )
-                from visualization_new.adapters.lightgbm_adapter import LightGBMAdapter
-                from visualization_new.core.registry import register_adapter
-                from visualization_new.plots.metrics import plot_model_comparison
-                from visualization_new.plots.features import plot_feature_importance_comparison
-                from visualization_new.utils.io import load_all_models, load_model_data
+                from src.visualization.adapters.lightgbm_adapter import LightGBMAdapter
+                from src.visualization.core.registry import register_adapter
+                from src.visualization.plots.metrics import plot_model_comparison
+                from src.visualization.plots.features import plot_feature_importance_comparison
+                from src.visualization.utils.io import load_all_models, load_model_data
                 import os
                 
                 # Register LightGBM adapter
@@ -888,7 +982,7 @@ def main():
                         os.makedirs(features_dir, exist_ok=True)
                         
                         # Configuration for performance visualizations
-                        from visualization_new.core.interfaces import VisualizationConfig
+                        from src.visualization.core.interfaces import VisualizationConfig
                         perf_config = VisualizationConfig(
                             output_dir=perf_dir,
                             format="png",
@@ -954,13 +1048,13 @@ def main():
                 
                 if args.use_one_hot:
                     print("  🔢 Using one-hot encoded LightGBM implementation (legacy mode)")
-                    from models.lightgbm_categorical import train_lightgbm_models
+                    from src.models.lightgbm_categorical import train_lightgbm_models
                     # Determine number of trials
                     n_trials = args.optimize_lightgbm if args.optimize_lightgbm else settings.LIGHTGBM_PARAMS.get('n_trials', 50)
                     lightgbm_models = train_lightgbm_models(datasets=args.datasets, n_trials=n_trials, force_retune=args.force_retune)
                 else:
                     print("  🌳 Using native categorical LightGBM implementation (default)")
-                    from models.lightgbm_categorical import train_lightgbm_categorical_models
+                    from src.models.lightgbm_categorical import train_lightgbm_categorical_models
                     lightgbm_models = train_lightgbm_categorical_models(datasets=args.datasets)
                 
                 step_times["LightGBM Training"] = time.time() - step_start
@@ -975,13 +1069,13 @@ def main():
                 
                 if args.use_one_hot:
                     print("  🔢 Using one-hot encoded CatBoost implementation (legacy mode)")
-                    from models.catboost_categorical import train_catboost_models
+                    from src.models.catboost_categorical import train_catboost_models
                     # Determine number of trials
                     n_trials = args.optimize_catboost if args.optimize_catboost else settings.CATBOOST_PARAMS.get('n_trials', 50)
                     catboost_models = train_catboost_models(datasets=args.datasets, n_trials=n_trials)
                 else:
                     print("  🌳 Using native categorical CatBoost implementation (default)")
-                    from models.catboost_categorical import train_catboost_categorical_models
+                    from src.models.catboost_categorical import train_catboost_categorical_models
                     catboost_models = train_catboost_categorical_models(datasets=args.datasets)
                 
                 step_times["CatBoost Training"] = time.time() - step_start
@@ -999,16 +1093,16 @@ def main():
             
             try:
                 # Import new architecture components
-                from visualization_new.viz_factory import (
+                from src.visualization.viz_factory import (
                     visualize_model, create_optimization_history_plot, create_param_importance_plot,
                     create_hyperparameter_comparison, create_basic_vs_optuna_comparison,
                     create_optuna_improvement_plot
                 )
-                from visualization_new.adapters.catboost_adapter import CatBoostAdapter
-                from visualization_new.core.registry import register_adapter
-                from visualization_new.plots.metrics import plot_model_comparison
-                from visualization_new.plots.features import plot_feature_importance_comparison
-                from visualization_new.utils.io import load_all_models, load_model_data
+                from src.visualization.adapters.catboost_adapter import CatBoostAdapter
+                from src.visualization.core.registry import register_adapter
+                from src.visualization.plots.metrics import plot_model_comparison
+                from src.visualization.plots.features import plot_feature_importance_comparison
+                from src.visualization.utils.io import load_all_models, load_model_data
                 import os
                 
                 # Register CatBoost adapter
@@ -1050,7 +1144,7 @@ def main():
                         os.makedirs(features_dir, exist_ok=True)
                         
                         # Configuration for performance visualizations
-                        from visualization_new.core.interfaces import VisualizationConfig
+                        from src.visualization.core.interfaces import VisualizationConfig
                         perf_config = VisualizationConfig(
                             output_dir=perf_dir,
                             format="png",
@@ -1112,22 +1206,22 @@ def main():
     # VIF analysis can be run separately
     if args.all or args.vif:
         print("\nAnalyzing multicollinearity using VIF...")
-        from evaluation.multicollinearity import analyze_multicollinearity
+        from src.evaluation.multicollinearity import analyze_multicollinearity
         base_vif, yeo_vif = analyze_multicollinearity()
 
     # Sector model pipeline
     if args.all_sector or args.train_sector:
         print("\nTraining sector-specific models...")
-        from models.sector_models import run_sector_models
+        from src.models.sector_models import run_sector_models
         sector_models = run_sector_models()
 
     if args.all_sector or args.evaluate_sector:
         print("\nEvaluating sector-specific models...")
-        from models.sector_models import evaluate_sector_models
+        from src.models.sector_models import evaluate_sector_models
         sector_eval_results = evaluate_sector_models()
         
         print("\nAnalyzing sector model feature importance...")
-        from models.sector_models import analyze_sector_importance
+        from src.models.sector_models import analyze_sector_importance
         sector_importance_results = analyze_sector_importance()
 
     if args.all_sector or args.visualize_sector:
@@ -1140,7 +1234,7 @@ def main():
     if args.all_sector or args.visualize_sector_new or args.all or (args.all and args.visualize_new):
         print("\nGenerating sector visualizations using new architecture...")
         try:
-            import visualization_new as viz
+            import src.visualization as viz
             viz.visualize_all_sector_plots()
             print("Sector visualizations with new architecture complete.")
         except Exception as e:
@@ -1148,27 +1242,27 @@ def main():
             print(f"Error details: {str(e)}")
             print("Continuing with legacy sector visualizations...")
     
-    # LightGBM Sector model pipeline
-    if args.train_sector_lightgbm:
+    # LightGBM Sector model pipeline (including when --all is used)
+    if args.train_sector_lightgbm or args.all:
         print("\nTraining sector-specific LightGBM models...")
-        from models.sector_lightgbm_models import run_sector_lightgbm_models
+        from src.models.sector_lightgbm_models import run_sector_lightgbm_models
         sector_lightgbm_models = run_sector_lightgbm_models()
 
-    if args.evaluate_sector_lightgbm:
+    if args.evaluate_sector_lightgbm or args.all:
         print("\nEvaluating sector-specific LightGBM models...")
-        from models.sector_lightgbm_models import evaluate_sector_lightgbm_models
+        from src.models.sector_lightgbm_models import evaluate_sector_lightgbm_models
         sector_lightgbm_eval_results = evaluate_sector_lightgbm_models()
         
         print("\nAnalyzing sector LightGBM model feature importance...")
-        from models.sector_lightgbm_models import analyze_sector_lightgbm_importance
+        from src.models.sector_lightgbm_models import analyze_sector_lightgbm_importance
         sector_lightgbm_importance_results = analyze_sector_lightgbm_importance()
 
-    if args.visualize_sector_lightgbm:
+    if args.visualize_sector_lightgbm or args.all:
         print("\nGenerating sector-specific LightGBM visualizations...")
         
         # Use the new visualization architecture for LightGBM sectors
         try:
-            from visualization_new.plots.sectors import visualize_lightgbm_sector_plots
+            from src.visualization.plots.sectors import visualize_lightgbm_sector_plots
             
             # Check if LightGBM sector models exist
             lightgbm_metrics_file = settings.METRICS_DIR / "sector_lightgbm_metrics.csv"
@@ -1232,28 +1326,28 @@ def run_additional_visualizations():
     try:
         # Add cross-validation plots
         print("\nGenerating cross-validation plots...")
-        from generate_model_cv_plots import main as generate_cv_plots
+        from scripts.utilities.generate_model_cv_plots import main as generate_cv_plots
         generate_cv_plots()
         
         # Add ElasticNet CV plots
         print("\nGenerating ElasticNet CV plots...")
-        from generate_elasticnet_cv_plots import generate_elasticnet_cv_plots
+        from scripts.utilities.generate_elasticnet_cv_plots import generate_elasticnet_cv_plots
         generate_elasticnet_cv_plots()
         
         # Add stratified splitting plot
         print("\nGenerating sector stratification plots...")
-        from create_sector_stratification_plot import create_sector_stratification_plot
+        from scripts.utilities.create_sector_stratification_plot import create_sector_stratification_plot
         create_sector_stratification_plot()
         
         # Add SHAP visualizations
         try:
             print("\nGenerating SHAP visualizations...")
-            from generate_shap_visualizations import main as generate_shap_viz
+            from scripts.utilities.generate_shap_visualizations import main as generate_shap_viz
             generate_shap_viz()
             
             # Add improved CatBoost SHAP visualizations for categorical features
             print("\nGenerating improved CatBoost SHAP visualizations for categorical features...")
-            from improved_catboost_shap_categorical import (
+            from scripts.archive.improved_catboost_shap_categorical import (
                 create_categorical_shap_plot, create_mixed_shap_summary, 
                 identify_categorical_features
             )
@@ -1343,17 +1437,17 @@ def run_additional_visualizations():
         try:
             print("\nGenerating baseline comparison visualizations...")
             # First try to load and generate from existing metrics
-            from visualization_new.plots.baselines import visualize_all_baseline_comparisons
+            from src.visualization.plots.baselines import visualize_all_baseline_comparisons
             baseline_figures = visualize_all_baseline_comparisons(create_individual_plots=False)
             
             # If that doesn't work, run the baseline evaluation directly
             if not baseline_figures:
                 print("No existing baseline metrics found. Running baseline evaluation...")
-                from utils import io
+                from src.utils import io
                 all_models = io.load_all_models()
                 
                 if all_models:
-                    from evaluation.baselines import run_baseline_evaluation
+                    from src.evaluation.baselines import run_baseline_evaluation
                     
                     # Run evaluation with all baseline types (random, mean, median)
                     print("Running random, mean, and median baseline evaluations...")

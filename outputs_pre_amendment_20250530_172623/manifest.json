@@ -1,0 +1,41 @@
+{
+  "archive_timestamp": "2025-05-30T17:26:24.526330",
+  "source_directory": "/mnt/d/ml_project_refactored/outputs",
+  "archive_directory": "/mnt/d/ml_project_refactored/outputs_pre_amendment_20250530_172623",
+  "statistics": {
+    "total_files": 4,
+    "total_dirs": 33,
+    "total_size": 100102,
+    "file_types": {
+      ".csv": 1,
+      ".pkl": 1,
+      ".txt": 1,
+      ".md": 1
+    },
+    "subdirectories": [
+      "feature_importance",
+      "metrics",
+      "models",
+      "reports",
+      "visualizations"
+    ]
+  },
+  "statistics_formatted": {
+    "total_size": "97.76 KB",
+    "total_files": 4,
+    "total_directories": 33,
+    "file_types": {
+      ".csv": 1,
+      ".pkl": 1,
+      ".txt": 1,
+      ".md": 1
+    },
+    "subdirectories": [
+      "feature_importance",
+      "metrics",
+      "models",
+      "reports",
+      "visualizations"
+    ]
+  }
+}
