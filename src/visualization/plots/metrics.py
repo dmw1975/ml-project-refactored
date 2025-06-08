@@ -98,13 +98,18 @@ class MetricsTable(ComparativeViz):
         ax.axis('off')
         ax.axis('tight')
         
-        # Get colors for each cell
+        # Get colors for each cell using the sector table's color scheme
         colors = []
         
-        # Initialize with white for standard rows and light gray for header
-        header_color = '#f2f2f2'  # Light gray for header
+        # Use blue header like sector table
+        header_color = '#6788d8'  # Blue header matching sector table
+        
+        # Alternate row colors for better readability
         for i in range(len(table_data)):
-            row_colors = ['white'] * len(table_data.columns)
+            if i % 2 == 0:
+                row_colors = ['#f0f0f0'] * len(table_data.columns)  # Light gray
+            else:
+                row_colors = ['white'] * len(table_data.columns)
             colors.append(row_colors)
         
         # Highlight best values for each metric
@@ -131,101 +136,69 @@ class MetricsTable(ComparativeViz):
         # Format values as strings with appropriate precision
         cell_text = []
         
-        # Calculate ideal column widths - give model names much more space
-        model_name_width = max(len(str(name)) for name in table_data['Model'])
-        
-        # The model column gets 60% of the width, metrics share the remaining 40%
-        col_widths = [0.6]  # Much wider for model names
-        
-        # Calculate width for metric columns - smaller and equal width
-        metric_width = 0.4 / len(available_metrics) 
+        # Set column widths matching sector table - give Model column more space
+        total_cols = len(table_data.columns)
+        model_width = 0.55  # Model column gets 55% of width (same as sector table)
+        other_width = 0.45 / (total_cols - 1)  # Other columns share remaining 45%
+        col_widths = [model_width if table_data.columns[i] == 'Model' else other_width 
+                     for i in range(len(table_data.columns))] 
         
         for i, row in table_data.iterrows():
             row_text = []
             
             for j, val in enumerate(row):
                 if j == 0:  # Model name
-                    # Don't truncate model names since we're giving them more space
                     row_text.append(str(val))
                 else:  # Metric
                     if isinstance(val, (int, float, np.number)):
-                        # Use fewer decimal places to save space
+                        # Format to 3 decimal places like sector table
                         row_text.append(f"{val:.3f}")
                     else:
                         row_text.append(str(val))
             
             cell_text.append(row_text)
-            
-            # Add column widths for metric columns (all equal)
-            if i == 0:
-                # Use the calculated metric width for all metric columns
-                for j in range(len(row) - 1):
-                    col_widths.append(metric_width)
         
-        # Add a title row above the table - by adding a temporary row to cell_text
-        title_row = ['Model Performance Metrics Summary'] + [''] * (len(table_data.columns) - 1)
-        cell_text.insert(0, title_row)
+        # Create header colors array
+        header_colors = [header_color for _ in range(len(table_data.columns))]
         
-        # Add a color row for the title (title gets a different background)
-        title_row_colors = ['#d4e6f1'] * len(table_data.columns)  # Light blue for title
-        colors.insert(0, title_row_colors)
-        
-        # Create table with improved formatting - without using colLabels (we'll set them manually)
-        table = ax.table(
+        # Create the table with improved formatting matching sector table
+        table = plt.table(
             cellText=cell_text,
+            colLabels=table_data.columns,
             cellColours=colors,
-            cellLoc='center',  # Default cell alignment
+            colColours=header_colors,
+            cellLoc='center',  # Default center alignment
             loc='center',
             colWidths=col_widths
         )
         
-        # Format table with better appearance
+        # Format table matching sector table style
         table.auto_set_font_size(False)
-        table.set_fontsize(9)  # Slightly smaller font for better readability
+        table.set_fontsize(10)  # Same font size as sector table
+        table.scale(1.0, 2.5)  # Much taller rows for better readability (same as sector)
         
-        # Set cell properties - title and header rows
-        for (row, col), cell in table.get_celld().items():
-            if row == 0:  # Title row
-                # Make title larger and bold
-                cell.set_text_props(weight='bold', color='black', fontsize=11)
+        # Style the table headers
+        for i in range(len(table_data.columns)):
+            cell = table[(0, i)]
+            cell.set_text_props(weight='bold', color='white')
+            cell.set_facecolor(header_color)
+        
+        # Style data cells with borders and set Model column to left-aligned
+        model_col_idx = list(table_data.columns).index('Model') if 'Model' in table_data.columns else -1
+        
+        for i in range(1, len(table_data) + 1):
+            for j in range(len(table_data.columns)):
+                cell = table[(i, j)]
+                cell.set_edgecolor('black')
+                cell.set_linewidth(0.5)
                 
-                # For the first cell (which contains the title)
-                if col == 0:
-                    # Make title span all columns
-                    cell.visible_edges = 'open'  # No borders
-                else:
-                    # Hide all other cells in title row
-                    cell.set_text_props(alpha=0)
-                    cell.visible_edges = 'open'  # No borders
-                    
-            elif row == 1:  # Header row
-                cell.set_text_props(weight='bold', color='black')
-                cell.set_facecolor(header_color)
-                
-                # Set column labels (first row is title, second row is header)
-                if col == 0:
-                    cell.get_text().set_text('Model')
-                    # Also left-align the 'Model' header
-                    cell.get_text().set_horizontalalignment('left')
-                elif col < len(table_data.columns):
-                    cell.get_text().set_text(table_data.columns[col])
-            
-            # Left-align text in the Model column (first column)
-            if col == 0 and row > 0:
-                cell.get_text().set_horizontalalignment('left')
-            
-            # Add borders except for title row
-            if row > 0:
-                cell.set_edgecolor('gray')
+                # Left-align only the Model column
+                if j == model_col_idx:
+                    cell.set_text_props(ha='left')
         
-        # Scale table to be more compact and fill the figure appropriately
-        # Use appropriate scale to fit all rows - increased for better spacing
-        table.scale(1.0, 1.3)
-        
-        # No separate title needed as it's part of the table
-        
-        # Adjust layout with better margins to prevent cutoff
-        plt.tight_layout(rect=[0.01, 0.01, 0.99, 0.99])
+        # Remove title completely (like sector table)
+        # Use subplots_adjust for full table space without title
+        plt.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
         
         # Save figure if requested
         if self.config.get('save', True):
@@ -241,7 +214,7 @@ class MetricsTable(ComparativeViz):
                     sys.path.append(str(project_root))
                     
                 # Import settings
-                from config import settings
+                from src.config import settings
                 
                 # Use performance directory instead of metrics
                 output_dir = settings.VISUALIZATION_DIR / "performance"
@@ -423,7 +396,7 @@ class MetricsComparisonPlot(ComparativeViz):
                     sys.path.append(str(project_root))
                     
                 # Import settings
-                from config import settings
+                from src.config import settings
                 
                 # Use performance directory instead of metrics
                 output_dir = settings.VISUALIZATION_DIR / "performance"

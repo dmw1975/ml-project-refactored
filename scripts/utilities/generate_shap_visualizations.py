@@ -1,505 +1,286 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-"""
-Generate SHAP (SHapley Additive exPlanations) visualizations for tree-based models
-(XGBoost, CatBoost, and LightGBM) to provide unified, consistent model explanations.
-
-This script produces four key SHAP visualizations:
-1. SHAP Summary Plot: Overall feature importance distribution
-2. SHAP Dependence Plot: How specific features impact predictions
-3. SHAP Force Plot: Individual prediction explanations
-4. Model Comparison SHAP Plot: Feature importance across all models
-
-All plots are saved to the visualizations/shap directory.
-"""
+#!/usr/bin/env python3
+"""Generate SHAP visualizations for all tree-based models."""
 
 import os
+import sys
+import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
-from pathlib import Path
 import shap
-import pickle
-import warnings
+from pathlib import Path
 
-from config import settings
-from utils import io
+# Add project root to path
+project_root = Path(__file__).parents[2]
+sys.path.insert(0, str(project_root))
 
-# Set up consistent styling
-plt.style.use('seaborn-v0_8-whitegrid')
-sns.set_palette('viridis')
+from src.config import settings
+from src.visualization.plots.shap_plots import SHAPVisualizer, create_model_comparison_shap_plot
+from src.visualization.core.style import setup_visualization_style
 
-# Configure warnings
-warnings.filterwarnings('ignore', category=FutureWarning)
-warnings.filterwarnings('ignore', category=UserWarning)
 
-def setup_output_directory():
-    """Create shap directory under visualizations if it doesn't exist."""
-    shap_dir = Path(settings.OUTPUT_DIR) / "visualizations" / "shap"
-    os.makedirs(shap_dir, exist_ok=True)
-    return shap_dir
+def load_grouped_models():
+    """Load all tree-based models from grouped pickle files."""
+    models_dir = settings.MODEL_DIR
+    all_models = {}
+    
+    # Load CatBoost models
+    catboost_file = models_dir / "catboost_models.pkl"
+    if catboost_file.exists():
+        with open(catboost_file, 'rb') as f:
+            catboost_models = pickle.load(f)
+            all_models.update(catboost_models)
+            print(f"Loaded {len(catboost_models)} CatBoost models")
+    
+    # Load LightGBM models
+    lightgbm_file = models_dir / "lightgbm_models.pkl"
+    if lightgbm_file.exists():
+        with open(lightgbm_file, 'rb') as f:
+            lightgbm_models = pickle.load(f)
+            all_models.update(lightgbm_models)
+            print(f"Loaded {len(lightgbm_models)} LightGBM models")
+    
+    # Load XGBoost models
+    xgboost_file = models_dir / "xgboost_models.pkl"
+    if xgboost_file.exists():
+        with open(xgboost_file, 'rb') as f:
+            xgboost_models = pickle.load(f)
+            all_models.update(xgboost_models)
+            print(f"Loaded {len(xgboost_models)} XGBoost models")
+    
+    return all_models
 
-def load_model_data():
-    """
-    Load model data for XGBoost, CatBoost, and LightGBM.
-    
-    Returns:
-        dict: Dictionary with model data by model type
-    """
-    model_files = {
-        "xgboost": "xgboost_models.pkl",
-        "catboost": "catboost_models.pkl", 
-        "lightgbm": "lightgbm_models.pkl"
-    }
-    
-    model_data = {}
-    
-    for model_type, filename in model_files.items():
-        try:
-            file_path = Path(settings.MODEL_DIR) / filename
-            if file_path.exists():
-                models = io.load_model(filename, settings.MODEL_DIR)
-                model_data[model_type] = models
-                print(f"Loaded {model_type} model data")
-            else:
-                print(f"Model file not found: {file_path}")
-        except Exception as e:
-            print(f"Error loading {model_type} model: {e}")
-    
-    return model_data
 
-def get_shap_explainer(model, model_type, X_sample):
-    """
-    Get appropriate SHAP explainer for the model type.
+def compute_shap_for_model(model_name, model_data, max_samples=50):
+    """Compute SHAP values for a single model."""
+    print(f"\n  Computing SHAP values for {model_name}...")
+    sys.stdout.flush()
     
-    Args:
-        model: Trained model instance
-        model_type: Type of model ('xgboost', 'catboost', or 'lightgbm')
-        X_sample: Sample of features for explanation
-        
-    Returns:
-        SHAP explainer object and expected values
-    """
-    # Clean data by converting object columns to category or dropping them
-    X_clean = X_sample.copy()
+    model = model_data.get('model')
+    X_test = model_data.get('X_test')
     
-    # Handle string/object columns that cause issues with SHAP
-    for col in X_clean.columns:
-        if X_clean[col].dtype == 'object':
-            # Drop the problematic column - focusing on numerical features
-            X_clean = X_clean.drop(columns=[col])
+    if model is None or X_test is None:
+        print(f"    ✗ Missing model or X_test data")
+        return None, None
     
-    if model_type == 'xgboost':
-        explainer = shap.TreeExplainer(model)
-        return explainer, explainer.expected_value, X_clean
-    
-    elif model_type == 'catboost':
-        # CatBoost typically handles categorical features better
-        explainer = shap.TreeExplainer(model)
-        return explainer, explainer.expected_value, X_clean
-    
-    elif model_type == 'lightgbm':
-        explainer = shap.TreeExplainer(model)
-        return explainer, explainer.expected_value, X_clean
-    
+    # Limit samples for performance
+    if len(X_test) > max_samples:
+        sample_indices = np.random.choice(len(X_test), max_samples, replace=False)
+        X_sample = X_test.iloc[sample_indices] if hasattr(X_test, 'iloc') else X_test[sample_indices]
     else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-
-def generate_shap_values(model_data):
-    """
-    Generate SHAP values for all models.
+        X_sample = X_test
     
-    Args:
-        model_data: Dictionary with model data by model type
-        
-    Returns:
-        dict: Dictionary with SHAP values by model type and dataset
-    """
-    shap_values_dict = {}
-    
-    for model_type, models in model_data.items():
-        shap_values_dict[model_type] = {}
-        
-        # Find best model variant and calculate SHAP values
-        for model_name, model_info in models.items():
-            # Skip if not a valid model or doesn't have the right keys
-            if not isinstance(model_info, dict) or 'model' not in model_info or 'X_test' not in model_info:
-                continue
-                
-            model = model_info['model']
-            X_test = model_info['X_test']
-            dataset = model_info.get('model_name', model_name)
-            
-            # For efficiency, use a sample of the test data if it's large
-            sample_size = min(100, len(X_test))
-            X_sample = X_test.sample(sample_size, random_state=42) if len(X_test) > sample_size else X_test
-            
+    try:
+        # Create appropriate explainer based on model type
+        if "CatBoost" in model_name:
+            # For CatBoost with categorical features, use TreeExplainer with specific parameters
             try:
-                print(f"Generating SHAP values for {model_type} - {dataset}")
-                explainer, expected_value, X_clean = get_shap_explainer(model, model_type, X_sample)
-                shap_values = explainer.shap_values(X_clean)
-                
-                # Store SHAP values and related data
-                shap_values_dict[model_type][dataset] = {
-                    'shap_values': shap_values,
-                    'expected_value': expected_value,
-                    'X_sample': X_clean,  # Use the cleaned data
-                    'feature_names': X_clean.columns.tolist(),  # Use the cleaned column names
-                    'model': model
-                }
-                
+                # First try with tree_path_dependent for categorical support
+                explainer = shap.TreeExplainer(model, feature_perturbation="tree_path_dependent")
             except Exception as e:
-                print(f"Error generating SHAP values for {model_type} - {dataset}: {e}")
-    
-    return shap_values_dict
+                # If that fails, try generic Explainer
+                print(f"    TreeExplainer with tree_path_dependent failed: {e}")
+                print("    Trying generic Explainer...")
+                explainer = shap.Explainer(model, X_sample)
+        elif "LightGBM" in model_name:
+            # For LightGBM, use TreeExplainer
+            explainer = shap.TreeExplainer(model)
+        elif "XGBoost" in model_name:
+            # For XGBoost, use TreeExplainer
+            explainer = shap.TreeExplainer(model)
+        else:
+            print(f"    ✗ Unknown model type")
+            return None, None
+        
+        # Compute SHAP values
+        shap_values = explainer.shap_values(X_sample)
+        
+        # Handle potential multiple outputs
+        if isinstance(shap_values, list):
+            shap_values = shap_values[0]
+        
+        print(f"    ✓ SHAP values computed: shape {shap_values.shape}")
+        return shap_values, X_sample
+        
+    except Exception as e:
+        print(f"    ✗ Error computing SHAP values: {str(e)}")
+        return None, None
 
-def create_shap_summary_plot(shap_values_dict, shap_dir):
-    """
-    Create SHAP summary plot for each model and dataset.
+
+def create_shap_plots(model_name, model_data, shap_values, X_sample):
+    """Create SHAP visualizations for a model."""
+    print(f"  Generating SHAP plots...")
+    sys.stdout.flush()
     
-    Args:
-        shap_values_dict: Dictionary with SHAP values
-        shap_dir: Output directory for plots
-    """
-    for model_type, datasets in shap_values_dict.items():
-        # Choose one representative dataset per model type
-        # Prefer optuna models over basic ones
-        representative_dataset = None
-        for dataset_name in datasets.keys():
-            if "_optuna" in dataset_name:
-                representative_dataset = dataset_name
-                break
-        
-        # If no optuna model, use the first available
-        if representative_dataset is None and datasets:
-            representative_dataset = list(datasets.keys())[0]
-        
-        if representative_dataset is None:
-            print(f"No datasets found for {model_type}")
-            continue
-            
-        # Get SHAP data for the representative dataset
-        shap_data = datasets[representative_dataset]
-        
-        # Create the plot
-        plt.figure(figsize=(12, 8))
-        if model_type != 'catboost':  # Normal case
-            shap.summary_plot(
-                shap_data['shap_values'], 
-                shap_data['X_sample'],
-                feature_names=shap_data['feature_names'],
-                show=False,
-                plot_size=(12, 8)
+    # Create output directory
+    output_dir = settings.VISUALIZATION_DIR / 'shap' / model_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Ensure model_name is in model_data
+    model_data['model_name'] = model_name
+    
+    # Initialize visualizer
+    visualizer = SHAPVisualizer(model_data)
+    
+    plots_created = 0
+    
+    try:
+        # 1. Summary plot
+        try:
+            visualizer.create_shap_summary_plot(
+                shap_values, 
+                X_sample,
+                output_dir / f"{model_name}_shap_summary.png"
             )
-        else:  # CatBoost sometimes returns a list instead of array
-            if isinstance(shap_data['shap_values'], list):
-                shap.summary_plot(
-                    shap_data['shap_values'][0], 
-                    shap_data['X_sample'],
-                    feature_names=shap_data['feature_names'],
-                    show=False,
-                    plot_size=(12, 8)
-                )
-            else:
-                shap.summary_plot(
-                    shap_data['shap_values'], 
-                    shap_data['X_sample'],
-                    feature_names=shap_data['feature_names'],
-                    show=False,
-                    plot_size=(12, 8)
-                )
+            plots_created += 1
+            print(f"    ✓ Summary plot created")
+        except Exception as e:
+            print(f"    ✗ Summary plot failed: {e}")
         
-        # Customize plot
-        plt.title(f"{model_type.upper()} Feature Impact Distribution", fontsize=14)
-        
-        # Save the plot
-        plt.tight_layout()
-        plot_path = shap_dir / f"{model_type}_shap_summary.png"
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        print(f"Created SHAP summary plot for {model_type}")
-
-def create_shap_dependence_plots(shap_values_dict, shap_dir):
-    """
-    Create SHAP dependence plots for top features of each model.
-    
-    Args:
-        shap_values_dict: Dictionary with SHAP values
-        shap_dir: Output directory for plots
-    """
-    for model_type, datasets in shap_values_dict.items():
-        # Choose one representative dataset per model type (prefer optuna)
-        representative_dataset = None
-        for dataset_name in datasets.keys():
-            if "_optuna" in dataset_name:
-                representative_dataset = dataset_name
-                break
-        
-        # If no optuna model, use the first available
-        if representative_dataset is None and datasets:
-            representative_dataset = list(datasets.keys())[0]
-        
-        if representative_dataset is None:
-            print(f"No datasets found for {model_type}")
-            continue
-            
-        # Get SHAP data for the representative dataset
-        shap_data = datasets[representative_dataset]
-        
-        # Calculate feature importance based on mean absolute SHAP value
-        if isinstance(shap_data['shap_values'], list):
-            # For multi-output models like CatBoost
-            mean_abs_shap = np.abs(shap_data['shap_values'][0]).mean(0)
-        else:
-            mean_abs_shap = np.abs(shap_data['shap_values']).mean(0)
-        
-        # Get the indices of the top 5 features
-        top_indices = np.argsort(mean_abs_shap)[-5:]
-        
-        # Create dependence plots for top 5 features
-        for index in reversed(top_indices):
-            feature_name = shap_data['feature_names'][index]
-            plt.figure(figsize=(10, 6))
-            
-            if isinstance(shap_data['shap_values'], list):
-                shap.dependence_plot(
-                    index, 
-                    shap_data['shap_values'][0], 
-                    shap_data['X_sample'],
-                    feature_names=shap_data['feature_names'],
-                    show=False
-                )
-            else:
-                shap.dependence_plot(
-                    index, 
-                    shap_data['shap_values'], 
-                    shap_data['X_sample'],
-                    feature_names=shap_data['feature_names'],
-                    show=False
-                )
-            
-            # Customize plot
-            plt.title(f"{model_type.upper()} SHAP Dependence: {feature_name}", fontsize=14)
-            
-            # Save the plot
-            plt.tight_layout()
-            safe_feature_name = feature_name.replace("/", "_").replace("\\", "_")
-            plot_path = shap_dir / f"{model_type}_dependence_{safe_feature_name}.png"
-            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-            plt.close()
-        
-        print(f"Created SHAP dependence plots for top features of {model_type}")
-
-def create_shap_force_plots(shap_values_dict, shap_dir):
-    """
-    Create SHAP force plots for sample predictions of each model.
-    
-    Args:
-        shap_values_dict: Dictionary with SHAP values
-        shap_dir: Output directory for plots
-    """
-    for model_type, datasets in shap_values_dict.items():
-        # Choose one representative dataset per model type (prefer optuna)
-        representative_dataset = None
-        for dataset_name in datasets.keys():
-            if "_optuna" in dataset_name:
-                representative_dataset = dataset_name
-                break
-        
-        # If no optuna model, use the first available
-        if representative_dataset is None and datasets:
-            representative_dataset = list(datasets.keys())[0]
-        
-        if representative_dataset is None:
-            print(f"No datasets found for {model_type}")
-            continue
-            
-        # Get SHAP data for the representative dataset
-        shap_data = datasets[representative_dataset]
-        
-        # Choose 5 diverse samples for force plots
-        if len(shap_data['X_sample']) >= 5:
-            # Get the sample with highest and lowest SHAP values, plus 3 from middle range
-            if isinstance(shap_data['shap_values'], list):
-                shap_sum = np.sum(np.abs(shap_data['shap_values'][0]), axis=1)
-            else:
-                shap_sum = np.sum(np.abs(shap_data['shap_values']), axis=1)
-                
-            sorted_indices = np.argsort(shap_sum)
-            sample_indices = [
-                sorted_indices[0],  # Lowest impact
-                sorted_indices[len(sorted_indices)//4],  # 25th percentile
-                sorted_indices[len(sorted_indices)//2],  # Median impact
-                sorted_indices[3*len(sorted_indices)//4],  # 75th percentile
-                sorted_indices[-1]  # Highest impact
-            ]
-        else:
-            # If fewer than 5 samples, use all available
-            sample_indices = list(range(len(shap_data['X_sample'])))
-        
-        # Create force plots for selected samples
-        for i, idx in enumerate(sample_indices):
-            plt.figure(figsize=(14, 3))
-            
-            # Create the force plot
-            if isinstance(shap_data['shap_values'], list):
-                shap_values = shap_data['shap_values'][0][idx]
-            else:
-                shap_values = shap_data['shap_values'][idx]
-                
-            # Convert to matplotlib plot
-            # Handle None base_value case (common with LightGBM)
-            base_value = shap_data['expected_value']
-            if base_value is None:
-                # Calculate base value as mean prediction
-                base_value = np.mean(shap_data['model'].predict(shap_data['X_sample']))
-            elif isinstance(base_value, list):
-                base_value = base_value[0]
-            
-            force_plot = shap.force_plot(
-                base_value=base_value,
-                shap_values=shap_values,
-                features=shap_data['X_sample'].iloc[idx],
-                feature_names=shap_data['feature_names'],
-                matplotlib=True,
-                show=False
+        # 2. Waterfall plot (for first instance)
+        try:
+            visualizer.create_shap_waterfall_plot(
+                shap_values,
+                X_sample,
+                instance_idx=0,
+                output_path=output_dir / f"{model_name}_shap_waterfall.png"
             )
-            
-            # Customize plot
-            plt.title(f"{model_type.upper()} SHAP Force Plot - Sample {i+1}", fontsize=14)
-            
-            # Save the plot
-            plt.tight_layout()
-            plot_path = shap_dir / f"{model_type}_force_plot_sample_{i+1}.png"
-            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-            plt.close()
+            plots_created += 1
+            print(f"    ✓ Waterfall plot created")
+        except Exception as e:
+            print(f"    ✗ Waterfall plot failed: {e}")
         
-        print(f"Created SHAP force plots for {model_type}")
+        # 3. Dependence plots for top features
+        feature_importance = pd.DataFrame({
+            'feature': X_sample.columns,
+            'importance': abs(shap_values).mean(axis=0)
+        }).sort_values('importance', ascending=False)
+        
+        # Create dependence plots for top 3 features
+        for i, (_, row) in enumerate(feature_importance.head(3).iterrows()):
+            feature = row['feature']
+            try:
+                safe_feature_name = feature.replace(' ', '_').replace('/', '_').replace('\\', '_')
+                visualizer.create_shap_dependence_plot(
+                    shap_values,
+                    X_sample,
+                    feature,
+                    output_dir / f"{model_name}_shap_dependence_{safe_feature_name}.png"
+                )
+                plots_created += 1
+                print(f"    ✓ Dependence plot for '{feature}' created")
+            except Exception as e:
+                print(f"    ✗ Dependence plot for '{feature}' failed: {e}")
+        
+        # 4. Categorical plots
+        categorical_features = []
+        for col in X_sample.columns:
+            if X_sample[col].dtype == 'object' or X_sample[col].nunique() <= 10:
+                categorical_features.append(col)
+        
+        # Create plots for up to 2 categorical features
+        for feature in categorical_features[:2]:
+            try:
+                safe_feature_name = feature.replace(' ', '_').replace('/', '_').replace('\\', '_')
+                visualizer.create_categorical_shap_plot(
+                    shap_values,
+                    X_sample,
+                    feature,
+                    output_dir / f"{model_name}_shap_categorical_{safe_feature_name}.png"
+                )
+                plots_created += 1
+                print(f"    ✓ Categorical plot for '{feature}' created")
+            except Exception as e:
+                print(f"    ✗ Categorical plot for '{feature}' failed: {e}")
+        
+        print(f"  Total plots created: {plots_created}")
+        return plots_created > 0
+        
+    except Exception as e:
+        print(f"  ✗ Error generating plots: {str(e)}")
+        return False
 
-def create_model_comparison_plot(shap_values_dict, shap_dir):
-    """
-    Create SHAP model comparison plot to compare feature importance across models.
-    
-    Args:
-        shap_values_dict: Dictionary with SHAP values
-        shap_dir: Output directory for plots
-    """
-    # Extract feature importance from each model
-    model_importance = {}
-    all_features = set()
-    
-    for model_type, datasets in shap_values_dict.items():
-        # Skip if no datasets
-        if not datasets:
-            continue
-            
-        # Choose one representative dataset per model type (prefer optuna)
-        representative_dataset = None
-        for dataset_name in datasets.keys():
-            if "_optuna" in dataset_name:
-                representative_dataset = dataset_name
-                break
-        
-        # If no optuna model, use the first available
-        if representative_dataset is None:
-            representative_dataset = list(datasets.keys())[0]
-            
-        # Get SHAP data for the representative dataset
-        shap_data = datasets[representative_dataset]
-        
-        # Calculate mean absolute SHAP value for each feature
-        if isinstance(shap_data['shap_values'], list):
-            mean_abs_shap = np.abs(shap_data['shap_values'][0]).mean(0)
-        else:
-            mean_abs_shap = np.abs(shap_data['shap_values']).mean(0)
-        
-        # Create dictionary of feature importance
-        importance_dict = {}
-        for i, feature in enumerate(shap_data['feature_names']):
-            importance_dict[feature] = mean_abs_shap[i]
-            all_features.add(feature)
-        
-        model_importance[model_type] = importance_dict
-    
-    # Convert to DataFrame for plotting
-    all_features = sorted(list(all_features))
-    comparison_data = []
-    
-    for feature in all_features:
-        for model_type in model_importance.keys():
-            importance = model_importance[model_type].get(feature, 0)
-            comparison_data.append({
-                'Feature': feature,
-                'Model': model_type.upper(),
-                'Importance': importance
-            })
-    
-    comparison_df = pd.DataFrame(comparison_data)
-    
-    # Get top 15 features by average importance across models
-    top_features = comparison_df.groupby('Feature')['Importance'].mean().nlargest(15).index.tolist()
-    comparison_df = comparison_df[comparison_df['Feature'].isin(top_features)]
-    
-    # Create the plot
-    plt.figure(figsize=(14, 10))
-    
-    # Pivot the data for plotting
-    pivot_df = comparison_df.pivot(index='Feature', columns='Model', values='Importance')
-    
-    # Create heatmap
-    ax = sns.heatmap(
-        pivot_df, 
-        cmap='viridis', 
-        annot=True, 
-        fmt='.3f',
-        linewidths=.5,
-        cbar_kws={'label': 'Mean |SHAP value|'}
-    )
-    
-    # Customize plot
-    plt.title('Feature Importance Comparison Across Models', fontsize=16)
-    plt.ylabel('Feature', fontsize=14)
-    plt.xlabel('Model', fontsize=14)
-    
-    # Save the plot
-    plt.tight_layout()
-    plot_path = shap_dir / "model_comparison_shap.png"
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print("Created model comparison SHAP plot")
 
 def main():
     """Main function to generate SHAP visualizations."""
-    print("Generating SHAP visualizations...")
+    print("Generating SHAP visualizations for tree-based models...")
     
-    # Set up output directory
-    shap_dir = setup_output_directory()
+    # Set plot style
+    setup_visualization_style()
     
-    # Load model data
-    model_data = load_model_data()
+    # Load all models
+    all_models = load_grouped_models()
     
-    if not model_data:
-        print("No model data found. Exiting.")
+    if not all_models:
+        print("No models found!")
         return
     
-    # Generate SHAP values
-    shap_values_dict = generate_shap_values(model_data)
+    # Filter for tree-based models only
+    tree_models = {
+        name: data for name, data in all_models.items() 
+        if any(model_type in name for model_type in ["CatBoost", "LightGBM", "XGBoost"])
+    }
     
-    if not any(datasets for datasets in shap_values_dict.values()):
-        print("No SHAP values could be calculated. Exiting.")
-        return
+    print(f"\nFound {len(tree_models)} tree-based models to process")
     
-    # Create visualizations
-    create_shap_summary_plot(shap_values_dict, shap_dir)
-    create_shap_dependence_plots(shap_values_dict, shap_dir)
-    create_shap_force_plots(shap_values_dict, shap_dir)
-    create_model_comparison_plot(shap_values_dict, shap_dir)
+    successful = 0
+    failed = 0
     
-    print("SHAP visualization generation complete.")
-    print(f"Visualizations saved to: {shap_dir}")
+    # Process each model
+    for i, (model_name, model_data) in enumerate(tree_models.items(), 1):
+        print(f"\n{'='*60}")
+        print(f"Processing model {i}/{len(tree_models)}: {model_name}")
+        print(f"{'='*60}")
+        
+        # Compute SHAP values
+        shap_values, X_sample = compute_shap_for_model(model_name, model_data)
+        
+        if shap_values is None:
+            failed += 1
+            continue
+        
+        # Generate visualizations
+        if create_shap_plots(model_name, model_data, shap_values, X_sample):
+            successful += 1
+        else:
+            failed += 1
+    
+    # Summary
+    print(f"\n{'='*60}")
+    print(f"SHAP Visualization Summary:")
+    print(f"  Total models: {len(tree_models)}")
+    print(f"  Successful: {successful}")
+    print(f"  Failed: {failed}")
+    print(f"{'='*60}")
+    
+    # Check results
+    print("\nChecking generated visualizations...")
+    shap_dir = settings.VISUALIZATION_DIR / 'shap'
+    
+    for model_type in ['CatBoost', 'LightGBM', 'XGBoost']:
+        model_count = sum(1 for name in tree_models if model_type in name)
+        plot_count = 0
+        
+        for name in tree_models:
+            if model_type in name:
+                model_dir = shap_dir / name
+                if model_dir.exists():
+                    plots = list(model_dir.glob("*.png"))
+                    plot_count += len(plots)
+        
+        print(f"{model_type}: {model_count} models, {plot_count} plots")
+    
+    # Create model comparison SHAP plot
+    print("\nCreating model comparison SHAP plot...")
+    try:
+        comparison_path = create_model_comparison_shap_plot(tree_models, shap_dir)
+        if comparison_path:
+            print(f"✓ Created model comparison SHAP plot: {comparison_path}")
+        else:
+            print("✗ Failed to create model comparison SHAP plot")
+    except Exception as e:
+        print(f"✗ Error creating model comparison SHAP plot: {str(e)}")
+
 
 if __name__ == "__main__":
     main()

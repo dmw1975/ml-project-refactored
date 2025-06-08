@@ -52,15 +52,21 @@ class XGBoostAdapter(ModelData):
         
         # Check if precomputed feature importance exists
         if 'feature_importance' in self.model_data:
-            importance_df = self.model_data['feature_importance']
+            importance_df = self.model_data['feature_importance'].copy()
             
             # Ensure correct format
             if not isinstance(importance_df, pd.DataFrame):
                 raise ValueError(f"Feature importance is not a DataFrame for {self.model_name}")
             
+            # Handle different column naming conventions
+            if 'feature' in importance_df.columns and 'Feature' not in importance_df.columns:
+                importance_df = importance_df.rename(columns={'feature': 'Feature'})
+            if 'importance' in importance_df.columns and 'Importance' not in importance_df.columns:
+                importance_df = importance_df.rename(columns={'importance': 'Importance'})
+            
             # Ensure required columns
             if 'Feature' not in importance_df.columns or 'Importance' not in importance_df.columns:
-                raise ValueError(f"Feature importance DataFrame missing required columns for {self.model_name}")
+                raise ValueError(f"Feature importance DataFrame missing required columns for {self.model_name}. Found: {list(importance_df.columns)}")
             
             # Add Std column if missing
             if 'Std' not in importance_df.columns:

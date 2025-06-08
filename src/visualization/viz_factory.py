@@ -39,7 +39,7 @@ def get_visualization_dir(model_name: str, plot_type: str) -> Path:
         sys.path.append(str(project_root))
         
     # Import settings
-    from config import settings
+    from src.config import settings
     
     # For residuals, use the top-level residuals directory without model-specific subdirectories
     if plot_type == "residuals":
@@ -570,7 +570,7 @@ def visualize_model(
             sys.path.append(str(project_root))
             
         # Import settings
-        from config import settings
+        from src.config import settings
         
         # Use type-based directory structure instead of model-name based
         # This avoids creating unwanted directories
@@ -693,7 +693,7 @@ def create_cross_model_feature_importance_by_dataset(
         Dict[str, Path]: Dictionary of dataset names and file paths
     """
     # Set up output directory
-    from config import settings
+    from src.config import settings
     import os
     import pandas as pd
     import matplotlib.pyplot as plt

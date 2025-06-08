@@ -24,8 +24,8 @@ except (ImportError, SyntaxError) as e:
     sns = None
 from typing import Dict, Any, List, Optional, Union, Tuple
 
-from config import settings
-from utils import io
+from src.config import settings
+from src.utils import io
 from src.visualization.core.interfaces import VisualizationConfig
 from src.visualization.utils.io import ensure_dir
 

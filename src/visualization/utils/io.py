@@ -32,8 +32,8 @@ def load_all_models() -> Dict[str, Dict[str, Any]]:
         sys.path.append(str(project_root))
         
     # Import io and settings
-    from utils import io
-    from config import settings
+    from src.utils import io
+    from src.config import settings
     
     # Load models from each file
     all_models = {}
@@ -100,8 +100,8 @@ def load_model_data(model_name: str) -> Dict[str, Any]:
         sys.path.append(str(project_root))
         
     # Import io and settings
-    from utils import io
-    from config import settings
+    from src.utils import io
+    from src.config import settings
     
     # Determine model type
     model_type = None

@@ -79,7 +79,7 @@ class BaseViz(ABC):
                 sys.path.append(str(project_root))
                 
             # Import settings
-            from config import settings
+            from src.config import settings
             
             # Use default from settings
             output_dir = settings.VISUALIZATION_DIR

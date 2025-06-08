@@ -7,9 +7,7 @@ from pathlib import Path
 import sys
 import os
 
-# Add project root to path
-project_root = Path(__file__).parent.absolute()
-sys.path.append(str(project_root))
+# No need to modify sys.path - use proper imports
 
 from src.config import settings
 from src.utils import io

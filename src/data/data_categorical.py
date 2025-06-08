@@ -31,15 +31,18 @@ def load_tree_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     # Load data
     df = pd.read_csv(tree_data_path)
     
-    # Load scores
-    from data import load_scores_data
-    scores = load_scores_data()
+    # Load scores - need to get the full DataFrame to access issuer_name
+    scores_path = Path("data/raw/score.csv")
+    if not scores_path.exists():
+        scores_path = PROCESSED_DATA_DIR / "score.csv"
     
-    # Set issuer_name as index for both datasets
+    scores_df = pd.read_csv(scores_path)
+    scores_df = scores_df.set_index('issuer_name')
+    scores = scores_df['esg_score']
+    
+    # Set issuer_name as index for features dataset
     if 'issuer_name' in df.columns:
         df = df.set_index('issuer_name')
-    if scores.index.name != 'issuer_name' and 'issuer_name' in scores.columns:
-        scores = scores.set_index('issuer_name')
     
     # Align indices using issuer names
     common_indices = df.index.intersection(scores.index)
@@ -79,15 +82,18 @@ def load_linear_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     # Load data
     df = pd.read_csv(linear_data_path)
     
-    # Load scores
-    from data import load_scores_data
-    scores = load_scores_data()
+    # Load scores - need to get the full DataFrame to access issuer_name
+    scores_path = Path("data/raw/score.csv")
+    if not scores_path.exists():
+        scores_path = PROCESSED_DATA_DIR / "score.csv"
     
-    # Set issuer_name as index for both datasets
+    scores_df = pd.read_csv(scores_path)
+    scores_df = scores_df.set_index('issuer_name')
+    scores = scores_df['esg_score']
+    
+    # Set issuer_name as index for features dataset
     if 'issuer_name' in df.columns:
         df = df.set_index('issuer_name')
-    if scores.index.name != 'issuer_name' and 'issuer_name' in scores.columns:
-        scores = scores.set_index('issuer_name')
     
     # Align indices using issuer names
     common_indices = df.index.intersection(scores.index)

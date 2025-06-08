@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import time
 import datetime
+from src.pipelines.state_manager import get_state_manager, PipelineStage
 
 
 class BasePipeline(ABC):
@@ -20,6 +21,7 @@ class BasePipeline(ABC):
         self.config = config
         self.step_times = {}
         self.start_time = None
+        self.state_manager = get_state_manager()
         
     @abstractmethod
     def run(self, **kwargs):

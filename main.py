@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import os
 
@@ -125,12 +125,35 @@ def parse_args():
                         help='Report existing Optuna studies without training')
     parser.add_argument('--use-one-hot', action='store_true', 
                         help='Use one-hot encoded features for tree models (default: native categorical features)')
+    parser.add_argument('--non-interactive', action='store_true',
+                        help='Run in non-interactive mode (auto-confirm all prompts with default values)')
 
     return parser.parse_args()
 
 def main():
     """Main function."""
+    
+    # Parse arguments first
     args = parse_args()
+    
+    # Initialize pipeline state manager
+    try:
+        # Delayed import to avoid circular dependencies
+        from src.pipelines.state_manager import get_state_manager, PipelineStage
+        state_manager = get_state_manager()
+        
+        # Reset state if force-retune is requested
+        if hasattr(args, 'force_retune') and args.force_retune:
+            print("Force retune requested - resetting pipeline state")
+            state_manager.reset_state()
+            
+        state_manager.start_stage(PipelineStage.INITIALIZATION)
+        use_state_manager = True
+    except Exception as e:
+        print(f"Warning: State manager initialization failed: {e}")
+        print("Continuing without pipeline state tracking...")
+        state_manager = None
+        use_state_manager = False
     
     # Set up logging first
     log_filename = setup_logging(args)
@@ -145,6 +168,10 @@ def main():
     logging.info("Parsed arguments:")
     for arg, value in vars(args).items():
         logging.info(f"  {arg}: {value}")
+    
+    # Complete initialization stage
+    if use_state_manager and state_manager:
+        state_manager.complete_stage(PipelineStage.INITIALIZATION)
     
     # Import settings
     from src.config import settings
@@ -182,6 +209,11 @@ def main():
 
     # Standard model pipeline
     if run_standard:
+        # Start training stage if we're going to train
+        if args.all or args.train or args.train_linear or args.train_xgboost or args.train_lightgbm or args.train_catboost:
+            if use_state_manager and state_manager:
+                state_manager.start_stage(PipelineStage.TRAINING)
+        
         # Consolidated confirmation check for all models when using --all
         should_retrain_all = True
         if args.all and not args.force_retune:
@@ -190,7 +222,11 @@ def main():
             
             all_existing_models = check_all_existing_models(datasets=args.datasets)
             if all_existing_models:
-                should_retrain_all = prompt_consolidated_retrain(all_existing_models)
+                if args.non_interactive:
+                    print("\n🤖 Non-interactive mode: Using existing models without retraining")
+                    should_retrain_all = False
+                else:
+                    should_retrain_all = prompt_consolidated_retrain(all_existing_models)
             else:
                 print("✨ No existing models found - proceeding with full training...")
                 should_retrain_all = True
@@ -733,11 +769,13 @@ def main():
                 try:
                     print("Creating SHAP visualizations...")
                     # Check if SHAP script exists
-                    shap_script = Path("generate_shap_visualizations.py")
+                    shap_script = Path("generate_shap_visualizations_safe.py")
+                    if not shap_script.exists():
+                        shap_script = Path("scripts/utilities/generate_shap_visualizations.py")
                     if shap_script.exists():
                         import subprocess
                         result = subprocess.run([sys.executable, str(shap_script)], 
-                                              capture_output=True, text=True)
+                                              capture_output=True, text=True, timeout=300)
                         if result.returncode == 0:
                             print("SHAP visualizations created successfully.")
                         else:
@@ -783,7 +821,7 @@ def main():
                     if perf_script.exists():
                         import subprocess
                         result = subprocess.run([sys.executable, str(perf_script)], 
-                                              capture_output=True, text=True)
+                                              capture_output=True, text=True, timeout=300)
                         if result.returncode == 0:
                             print("Performance optimization plots created successfully.")
                         else:
@@ -1285,7 +1323,7 @@ def main():
     # Run additional visualizations when using --all flag
     if args.all:
         step_start = time.time()
-        run_additional_visualizations()
+        run_additional_visualizations(use_state_manager, state_manager)
         step_times["Additional Visualizations"] = time.time() - step_start
     
     # Calculate and display execution time
@@ -1293,7 +1331,7 @@ def main():
     execution_time = end_time - start_time
     
     # Format as hours, minutes, seconds
-    time_formatted = str(datetime.timedelta(seconds=int(execution_time)))
+    time_formatted = str(timedelta(seconds=int(execution_time)))
     
     print("\nDone!")
     print(f"\nTotal execution time: {time_formatted} (HH:MM:SS)")
@@ -1310,7 +1348,7 @@ def main():
         
         for step, step_time in sorted_steps:
             percent = (step_time / execution_time) * 100
-            time_formatted = str(datetime.timedelta(seconds=int(step_time)))
+            time_formatted = str(timedelta(seconds=int(step_time)))
             print(f"{step:<35} | {time_formatted:<10} | {percent:6.2f}%")
     
     # If the execution was longer than 5 minutes, provide a simpler breakdown
@@ -1321,7 +1359,7 @@ def main():
         
         print(f"\nTotal runtime: {hours} hours, {minutes} minutes, {seconds} seconds")
 
-def run_additional_visualizations():
+def run_additional_visualizations(use_state_manager=False, state_manager=None):
     """Run additional visualizations not covered in the standard visualization modules."""
     try:
         # Add cross-validation plots
@@ -1469,6 +1507,15 @@ def run_additional_visualizations():
         print("\nAdditional visualizations complete.")
     except Exception as e:
         print(f"Error generating additional visualizations: {e}")
+    
+    # Complete pipeline and print summary if using state manager
+    if use_state_manager and state_manager:
+        try:
+            # state_manager.complete_stage(PipelineStage.INITIALIZATION)
+            state_manager.complete_stage(PipelineStage.COMPLETION)
+            state_manager.print_summary()
+        except Exception as e:
+            print(f"Warning: Could not complete state tracking: {e}")
 
 if __name__ == "__main__":
     main()

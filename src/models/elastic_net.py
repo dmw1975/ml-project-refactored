@@ -18,6 +18,7 @@ sys.path.append(str(project_root))
 from src.config import settings
 from src.data.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
 from src.utils import io
+from src.pipelines.state_manager import get_state_manager
 from src.models.linear_regression import perform_stratified_split_by_sector
 from scripts.archive.enhanced_elasticnet_optuna import train_enhanced_elasticnet
 
@@ -220,9 +221,9 @@ def train_elasticnet_models(datasets=None, use_optuna=True, n_trials=100):
     """
     # Force reload data module to ensure latest version
     import importlib
-    import data
+    import src.data as data
     importlib.reload(data)
-    from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    from src.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
     
     print("Loading data...")
     feature_df = load_features_data()
@@ -295,6 +296,8 @@ def train_elasticnet_models(datasets=None, use_optuna=True, n_trials=100):
         
         # Save results
         io.save_model(model_results, "elasticnet_models.pkl", settings.MODEL_DIR)
+        # Report model completion
+        get_state_manager().increment_completed_models('elasticnet')
         
         # Also save parameter results for compatibility
         param_results = []

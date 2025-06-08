@@ -6,13 +6,8 @@ import os
 import sys
 from pathlib import Path
 
-# Add project root to path if needed
-project_root = Path(__file__).parent.parent.absolute()
-if str(project_root) not in sys.path:
-    sys.path.append(str(project_root))
-
 # Import settings
-from config import settings
+from src.config import settings
 
 def save_model(model, filename, directory):
     """Save a model to a pickle file."""

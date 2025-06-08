@@ -518,7 +518,7 @@ class StatisticalTestsPlot(ComparativeViz):
                         sys.path.append(str(project_root))
                         
                     # Import settings
-                    from config import settings
+                    from src.config import settings
                     
                     # Use default output directory
                     output_dir = settings.VISUALIZATION_DIR / "statistical_tests"
@@ -557,7 +557,7 @@ class StatisticalTestsPlot(ComparativeViz):
                             sys.path.append(str(project_root))
                             
                         # Import settings
-                        from config import settings
+                        from src.config import settings
                         
                         # Use default output directory
                         output_dir = settings.VISUALIZATION_DIR / "statistical_tests"
@@ -626,12 +626,12 @@ def visualize_statistical_tests(
             sys.path.append(str(project_root))
             
         # Import settings
-        from config import settings
+        from src.config import settings
         
         tests_file = settings.METRICS_DIR / "model_comparison_tests.csv"
     
     # Clean up any outdated visualizations
-    from config import settings
+    from src.config import settings
     output_dir = settings.VISUALIZATION_DIR / "statistical_tests"
     if output_dir.exists():
         # Remove deprecated matrices

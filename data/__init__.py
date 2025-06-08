@@ -8,7 +8,7 @@ import sys
 project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
-from config import settings
+from src.config import settings
 
 def load_features_data():
     """Load the features dataset."""

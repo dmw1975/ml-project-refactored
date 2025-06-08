@@ -11,8 +11,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
-from config import settings
-from utils import io
+from src.config import settings
+from src.utils import io
 
 def load_all_models():
     """Load all trained models from model directory."""

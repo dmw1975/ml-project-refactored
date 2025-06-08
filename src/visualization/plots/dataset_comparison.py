@@ -387,7 +387,7 @@ class DatasetModelComparisonPlot(ComparativeViz):
                             sys.path.append(str(project_root))
                             
                         # Import settings
-                        from config import settings
+                        from src.config import settings
                         
                         # Use default output directory
                         output_dir = settings.VISUALIZATION_DIR / "dataset_comparison"

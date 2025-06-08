@@ -9,6 +9,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
 from src.pipelines.base import BasePipeline
+from src.pipelines.state_manager import PipelineStage
 from src.utils.io import load_all_models
 from src.config import settings
 
@@ -40,6 +41,32 @@ class VisualizationPipeline(BasePipeline):
             models: Pre-loaded models (None = load from disk)
             **kwargs: Additional arguments
         """
+        # Check if we can start visualization
+        if not self.state_manager.can_start_stage(PipelineStage.VISUALIZATION):
+            raise RuntimeError("Cannot start visualization: evaluation not completed")
+        
+        # Additional check: ensure all models are completed before generating metrics table
+        if plot_types is None or 'metrics_table' in plot_types:
+            if not self.state_manager.all_models_completed():
+                print("⚠️ Warning: Not all expected models have completed training.")
+                print("  Metrics table generation may be incomplete.")
+                # Get status summary
+                expected = self.state_manager._state["model_counts"]["expected"]
+                completed = self.state_manager._state["model_counts"]["completed"]
+                for model_type, exp_count in expected.items():
+                    comp_count = completed.get(model_type, 0)
+                    if comp_count < exp_count:
+                        print(f"  - {model_type}: {comp_count}/{exp_count} completed")
+        
+        # Start visualization stage
+        self.state_manager.start_stage(
+            PipelineStage.VISUALIZATION,
+            details={
+                "plot_types": plot_types,
+                "model_count": len(models) if models else "unknown"
+            }
+        )
+        
         self.start_timing()
         
         # Load models if not provided
@@ -92,7 +119,21 @@ class VisualizationPipeline(BasePipeline):
         if 'additional' in plot_types:
             self._create_additional_visualizations()
             
-        self.report_timing()
+        try:
+            self.report_timing()
+            
+            # Mark visualization as completed
+            outputs = {
+                "plots_generated": self.generated_plots,
+                "plot_count": len(self.generated_plots),
+                "visualizations": self.generated_plots
+            }
+            self.state_manager.complete_stage(PipelineStage.VISUALIZATION, outputs)
+            
+        except Exception as e:
+            self.state_manager.fail_stage(PipelineStage.VISUALIZATION, str(e))
+            raise
+            
         return self.generated_plots
     
     def _create_residual_plots(self, viz):
@@ -121,6 +162,10 @@ class VisualizationPipeline(BasePipeline):
         """Create metrics summary table."""
         print("\nCreating metrics summary table...")
         with self.time_step("Metrics Table"):
+            # Final check before creating metrics table
+            if not self.state_manager.all_models_completed():
+                print("⚠️ Warning: Creating metrics table with incomplete model set")
+            
             try:
                 viz.create_metrics_table(model_list)
                 self.generated_plots.append('metrics_table')
@@ -229,8 +274,22 @@ class VisualizationPipeline(BasePipeline):
                 
                 # SHAP visualizations
                 print("  Generating SHAP visualizations...")
-                from scripts.utilities.generate_shap_visualizations import main as generate_shap_viz
-                generate_shap_viz()
+                try:
+                    from scripts.utilities.generate_shap_visualizations import main as generate_shap_viz
+                    generate_shap_viz()
+                except Exception as e:
+                    print(f"    Warning: SHAP generation timed out or failed: {e}")
+                
+                # Ensure model comparison SHAP plot is created
+                print("  Generating model comparison SHAP plot...")
+                try:
+                    from scripts.utilities.generate_model_comparison_shap_only import main as generate_comparison
+                    if generate_comparison():
+                        print("    ✓ Model comparison SHAP plot created")
+                    else:
+                        print("    ✗ Model comparison SHAP plot failed")
+                except Exception as e:
+                    print(f"    ✗ Error creating model comparison SHAP plot: {e}")
                 
                 self.generated_plots.append('additional')
                 print("✓ Additional visualizations created")

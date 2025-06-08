@@ -23,7 +23,7 @@ except ImportError:
     OPTUNA_AVAILABLE = False
 
 from src.visualization.core.interfaces import ModelData, VisualizationConfig
-from config import settings
+from src.config import settings
 
 
 def _process_config(config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None,
@@ -613,10 +613,13 @@ def plot_basic_vs_optuna(
     model_data = []
     for model in model_data_list:
         model_name = model.get('model_name', 'Unknown')
-        model_type = 'Basic' if 'basic' in model_name else 'Optuna' if 'optuna' in model_name else 'Unknown'
         
-        # Skip if not basic or optuna model
-        if model_type == 'Unknown':
+        # Determine model type based on presence of Optuna study
+        has_study = model.get('has_optuna_study', False) or model.get('optuna_study', None) is not None
+        model_type = 'Optuna' if has_study else 'Basic'
+        
+        # Skip if model name pattern doesn't match expected format
+        if '_' not in model_name:
             continue
         
         # Extract dataset (e.g., "Base" or "Yeo" from "XGB_Base_basic")

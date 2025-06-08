@@ -12,8 +12,7 @@ from pathlib import Path
 from typing import Tuple, List
 from sklearn.model_selection import train_test_split
 
-from config import settings
-from data import load_scores_data, add_random_feature
+from src.config import settings
 
 
 def load_tree_models_from_csv() -> Tuple[pd.DataFrame, pd.Series, List[str]]:

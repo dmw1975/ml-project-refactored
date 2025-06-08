@@ -65,7 +65,7 @@ from src.visualization.components.formats import save_figure
 from src.visualization.utils.io import ensure_dir, load_all_models
 
 # Import project settings
-from config import settings
+from src.config import settings
 
 
 class SectorStratificationPlot(BaseViz):
@@ -115,8 +115,8 @@ class SectorStratificationPlot(BaseViz):
                     sys.path.append(str(project_root))
 
                 # Import the actual io module from the main project
-                from utils import io
-                from config import settings
+                from src.utils import io
+                from src.config import settings
 
                 model_files = {
                     'xgboost': 'xgboost_models.pkl',

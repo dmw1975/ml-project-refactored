@@ -228,6 +228,7 @@ def train_enhanced_catboost_categorical(X, y, dataset_name, categorical_columns,
     model_key = f"CatBoost_{dataset_name}_categorical_basic"
     results[model_key] = {
         'model': basic_model,
+        'model_name': model_key,  # Add model_name field
         'X_train': X_train,
         'X_test': X_test,
         'y_train': y_train,
@@ -299,6 +300,7 @@ def train_enhanced_catboost_categorical(X, y, dataset_name, categorical_columns,
     model_key = f"CatBoost_{dataset_name}_categorical_optuna"
     results[model_key] = {
         'model': optuna_model,
+        'model_name': model_key,  # Add model_name field
         'X_train': X_train,
         'X_test': X_test,
         'y_train': y_train,

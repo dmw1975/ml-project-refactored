@@ -13,6 +13,8 @@ import numpy as np
 from pathlib import Path
 import pickle
 from src.config import settings
+from src.pipelines.state_manager import get_state_manager
+
 
 
 def train_catboost_categorical(X, y, dataset_name, categorical_columns, test_size=0.2, random_state=42):

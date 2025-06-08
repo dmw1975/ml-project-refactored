@@ -43,9 +43,9 @@ def run_sector_models(feature_df=None, score_df=None, base_columns=None, yeo_col
     """
     # Force reload data module to ensure latest version
     import importlib
-    import data
+    import src.data as data
     importlib.reload(data)
-    from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    from src.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
     
     print("Loading data for sector-specific models...")
     

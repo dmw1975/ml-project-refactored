@@ -1,0 +1,10 @@
+Archive created: 2025-06-08T14:20:42.474271
+Source: /mnt/d/ml_project_refactored/outputs
+Total files: 542
+Total size: 250.71 MB
+
+Critical files archived:
+- pipeline_state.json: YES
+- Model files: 7
+- All PKL files: 9
+- All JSON files: 1

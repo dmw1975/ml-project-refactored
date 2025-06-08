@@ -21,8 +21,8 @@ import json
 project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
-from config import settings
-from evaluation.baselines import generate_random_baseline, generate_mean_baseline, generate_median_baseline
+from src.config import settings
+from src.evaluation.baselines import generate_random_baseline, generate_mean_baseline, generate_median_baseline
 
 
 def collect_cv_metrics_from_models(models_dict):
@@ -768,7 +768,7 @@ def run_baseline_significance_analysis(models_dict, scores_data=None, output_dir
     
     # Load scores data if not provided
     if scores_data is None:
-        from data import load_scores_data
+        from src.data import load_scores_data
         scores_data = load_scores_data()
         print(f"Loaded scores data with {len(scores_data)} records.")
     
@@ -827,7 +827,7 @@ def run_baseline_significance_analysis(models_dict, scores_data=None, output_dir
 
 if __name__ == "__main__":
     # For testing/development
-    from utils import io
+    from src.utils import io
     
     # Load all models
     all_models = io.load_all_models()

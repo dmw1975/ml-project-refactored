@@ -9,8 +9,9 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
 from src.pipelines.base import BasePipeline
+from src.pipelines.state_manager import PipelineStage
 from src.evaluation.metrics import evaluate_models
-from src.evaluation.baselines import evaluate_baselines
+from src.evaluation.baselines import run_baseline_evaluation
 from src.evaluation.importance import analyze_feature_importance
 from src.evaluation.multicollinearity import analyze_multicollinearity
 
@@ -46,6 +47,21 @@ class EvaluationPipeline(BasePipeline):
             analyze_vif: Whether to analyze multicollinearity
             **kwargs: Additional arguments
         """
+        # Check if we can start evaluation
+        if not self.state_manager.can_start_stage(PipelineStage.EVALUATION):
+            raise RuntimeError("Cannot start evaluation: training not completed")
+        
+        # Start evaluation stage
+        self.state_manager.start_stage(
+            PipelineStage.EVALUATION,
+            details={
+                "evaluate_metrics": evaluate_metrics,
+                "evaluate_baselines": evaluate_baselines,
+                "analyze_importance": analyze_importance,    
+                "analyze_vif": analyze_vif
+            }
+        )
+        
         self.start_timing()
         
         if evaluate_metrics:
@@ -60,7 +76,23 @@ class EvaluationPipeline(BasePipeline):
         if analyze_vif:
             self._analyze_multicollinearity()
             
-        self.report_timing()
+        try:
+            self.report_timing()
+            
+            # Mark evaluation as completed
+            outputs = {
+                "metrics_evaluated": evaluate_metrics,
+                "baselines_evaluated": evaluate_baselines,
+                "importance_analyzed": analyze_importance,
+                "vif_analyzed": analyze_vif,
+                "result_count": len(self.evaluation_results)
+            }
+            self.state_manager.complete_stage(PipelineStage.EVALUATION, outputs)
+            
+        except Exception as e:
+            self.state_manager.fail_stage(PipelineStage.EVALUATION, str(e))
+            raise
+            
         return self.evaluation_results
     
     def _evaluate_metrics(self):
@@ -79,7 +111,9 @@ class EvaluationPipeline(BasePipeline):
         print("\nEvaluating baselines...")
         with self.time_step("Baseline Evaluation"):
             try:
-                baselines = evaluate_baselines()
+                from src.utils.io import load_all_models
+                models = load_all_models()
+                baselines = run_baseline_evaluation(models)
                 self.evaluation_results['baselines'] = baselines
                 print("✓ Baseline evaluation completed")
             except Exception as e:

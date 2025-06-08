@@ -14,7 +14,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
-from config import settings
+from src.config import settings
 
 
 def generate_random_baseline(actual_values, min_val=0, max_val=10, seed=42):
@@ -192,7 +192,9 @@ def calculate_baseline_comparison(
                 # Update or append with Baseline Type
                 existing_row = (df['Model'] == model_name) & (df['Baseline Type'] == baseline_type)
                 if existing_row.any():
-                    df.loc[existing_row] = pd.Series(results)
+                    # Update existing row with new values
+                    for col, val in results.items():
+                        df.loc[existing_row, col] = val
                 else:
                     df = pd.concat([df, pd.DataFrame([results])], ignore_index=True)
             else:
@@ -200,8 +202,10 @@ def calculate_baseline_comparison(
                 # For backward compatibility, only update/append if this is a Random baseline
                 if baseline_type == "Random":
                     if model_name in df['Model'].values:
-                        df.loc[df['Model'] == model_name] = pd.Series({k: v for k, v in results.items() 
-                                                                       if k != 'Baseline Type'})
+                        # Update existing row
+                        for col, val in results.items():
+                            if col != 'Baseline Type' and col in df.columns:
+                                df.loc[df['Model'] == model_name, col] = val
                     else:
                         # Create a copy without Baseline Type for legacy format
                         legacy_results = {k: v for k, v in results.items() if k != 'Baseline Type'}

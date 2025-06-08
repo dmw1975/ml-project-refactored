@@ -89,6 +89,9 @@ def cleanup_old_results():
 # Call the cleanup
 cleanup_old_results()
 
+from src.pipelines.state_manager import get_state_manager
+
+
 
 def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=0.2):
     """
@@ -147,9 +150,9 @@ def train_all_models():
     """
     # Force reload data module to ensure latest version
     import importlib
-    import data
+    import src.data as data
     importlib.reload(data)
-    from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    from src.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
     
     print("Loading data...")
     feature_df = load_features_data()
@@ -238,6 +241,8 @@ def train_all_models():
     # Save results
     io.ensure_dir(settings.MODEL_DIR)
     io.save_model(model_results, "linear_regression_models.pkl", settings.MODEL_DIR)
+    # Report model completion
+    get_state_manager().increment_completed_models('linear_regression')
     
     # Save summary to CSV
     metrics_df = pd.DataFrame([

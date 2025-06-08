@@ -14,7 +14,7 @@ import sys
 project_root = Path(__file__).parents[2].absolute()
 sys.path.append(str(project_root))
 
-from config import settings
+from src.config import settings
 
 
 def create_consolidated_baseline_comparison(

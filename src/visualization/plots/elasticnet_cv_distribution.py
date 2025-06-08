@@ -54,7 +54,7 @@ def plot_elasticnet_cv_distribution(
             sys.path.append(str(project_root))
             
         # Import settings
-        from config import settings
+        from src.config import settings
         
         params_file = settings.MODEL_DIR / 'elasticnet_params.pkl'
     
@@ -197,7 +197,7 @@ def plot_elasticnet_cv_distribution(
         output_dir = config.get('output_dir')
         if output_dir is None:
             # Use default output directory
-            from config import settings
+            from src.config import settings
             output_dir = settings.VISUALIZATION_DIR / "performance" / "elasticnet"
         
         # Ensure directory exists

@@ -123,23 +123,13 @@ class FeatureImportancePlot(ModelViz):
                     sys.path.append(str(project_root))
                     
                 # Import settings
-                from config import settings
+                from src.config import settings
                 
                 # Use default from settings
                 output_dir = settings.VISUALIZATION_DIR / "features"
             
-            # Determine model type and use appropriate subdirectory
-            model_name_lower = model_name.lower()
-            if 'catboost' in model_name_lower:
-                output_dir = output_dir / 'catboost'
-            elif 'lightgbm' in model_name_lower:
-                output_dir = output_dir / 'lightgbm'
-            elif 'xgboost' in model_name_lower:
-                output_dir = output_dir / 'xgboost'
-            elif 'elasticnet' in model_name_lower:
-                output_dir = output_dir / 'elasticnet'
-            elif model_name_lower.startswith('lr_'):
-                output_dir = output_dir / 'linear'
+            # Don't add subdirectory here if already provided in config
+            # The subdirectory should be handled by the caller to avoid duplication
             
             # Ensure directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -291,7 +281,7 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                     sys.path.append(str(project_root))
 
                 # Import settings
-                from config import settings
+                from src.config import settings
 
                 # Use default from settings - save comparison plots to comparisons directory
                 output_dir = settings.VISUALIZATION_DIR / "features" / "comparisons"
@@ -302,7 +292,7 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                     if model_dir in output_dir_str:
                         # If we're in a model-specific subdirectory, use the comparisons directory
                         # to avoid saving top_N_features_avg_importance.png in model subdirectories
-                        from config import settings
+                        from src.config import settings
                         output_dir = settings.VISUALIZATION_DIR / "features" / "comparisons"
                         print(f"Redirecting top_{top_n}_features_avg_importance.png to comparisons directory")
                         break
@@ -333,8 +323,7 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                 # Default to True for other models
                 create_heatmap = True
         
-        # No longer creating heatmap visualization
-        print("Skipping heatmap creation - this output is no longer needed")
+        # Heatmap creation is deprecated - removed from visualization pipeline
         
         # Show figure if requested
         if self.config.get('show', False):
@@ -407,7 +396,7 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                     sys.path.append(str(project_root))
 
                 # Import settings
-                from config import settings
+                from src.config import settings
 
                 # Use default from settings - save comparison plots to comparisons directory
                 output_dir = settings.VISUALIZATION_DIR / "features" / "comparisons"
@@ -418,7 +407,7 @@ class FeatureImportanceComparisonPlot(ComparativeViz):
                     if model_dir in output_dir_str:
                         # If we're in a model-specific subdirectory, use the comparisons directory
                         # to avoid saving top_features_heatmap.png in model subdirectories
-                        from config import settings
+                        from src.config import settings
                         output_dir = settings.VISUALIZATION_DIR / "features" / "comparisons"
                         print(f"Redirecting top_features_heatmap.png to comparisons directory")
                         break

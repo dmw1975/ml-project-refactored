@@ -9,6 +9,7 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
 from src.pipelines.base import BasePipeline
+from src.pipelines.state_manager import PipelineStage
 from src.utils.io import check_all_existing_models, prompt_consolidated_retrain
 from src.config import settings
 
@@ -44,11 +45,38 @@ class TrainingPipeline(BasePipeline):
             use_one_hot: Use one-hot encoding for tree models
             **kwargs: Additional arguments for specific models
         """
+        # Check if we can start training
+        if not self.state_manager.can_start_stage(PipelineStage.TRAINING):
+            raise RuntimeError("Cannot start training: dependencies not met")
+        
+        # Start training stage
+        self.state_manager.start_stage(
+            PipelineStage.TRAINING,
+            details={
+                "models": models,
+                "datasets": datasets,
+                "force_retrain": force_retrain
+            }
+        )
+        
         self.start_timing()
         
         # Default to all models if none specified
         if models is None:
             models = ['linear_regression', 'elasticnet', 'xgboost', 'lightgbm', 'catboost']
+        
+        # Set expected model counts
+        model_counts = {
+            'linear_regression': 4,  # base, yeo, base_random, yeo_random
+            'elasticnet': 4,
+            'xgboost': 8,  # includes categorical variants
+            'lightgbm': 8,
+            'catboost': 8
+        }
+        
+        for model_type in models:
+            if model_type in model_counts:
+                self.state_manager.set_expected_models(model_type, model_counts[model_type])
             
         # Default to all datasets if none specified
         if datasets is None or 'all' in datasets:
@@ -77,7 +105,20 @@ class TrainingPipeline(BasePipeline):
         if 'catboost' in models and should_retrain:
             self._train_catboost(datasets, use_one_hot, **kwargs)
             
-        self.report_timing()
+        try:
+            self.report_timing()
+            
+            # Mark training as completed
+            outputs = {
+                "models": list(self.trained_models.keys()),
+                "model_count": sum(len(v) if isinstance(v, dict) else 1 for v in self.trained_models.values())
+            }
+            self.state_manager.complete_stage(PipelineStage.TRAINING, outputs)
+            
+        except Exception as e:
+            self.state_manager.fail_stage(PipelineStage.TRAINING, str(e))
+            raise
+            
         return self.trained_models
     
     def _train_linear_regression(self):

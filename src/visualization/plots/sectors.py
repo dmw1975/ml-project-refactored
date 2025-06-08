@@ -38,7 +38,7 @@ project_root = Path(__file__).parent.parent.parent.absolute()
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
     
-from config import settings
+from src.config import settings
 
 
 def create_sector_stratification_plot(output_dir):
@@ -334,6 +334,10 @@ class SectorPerformanceComparison(BaseViz):
         Returns:
             matplotlib.figure.Figure: The created figure
         """
+        # Get unique model types from the data
+        model_types = sorted(self.metrics_df['type'].unique()) if 'type' in self.metrics_df.columns else []
+        model_types_str = ', '.join(model_types) if model_types else 'All Models'
+        
         # Group by sector and get average metrics
         sector_perf = self.metrics_df.groupby('sector').agg({
             'RMSE': 'mean',
@@ -357,8 +361,13 @@ class SectorPerformanceComparison(BaseViz):
                     f'RMSE: {height:.4f}\nR²: {r2:.4f}\n(n={int(count)})', 
                     ha='center', va='bottom', fontsize=10)
         
-        ax.set_title('Average Model Performance by Sector', 
-                    fontsize=self.config.get('title_fontsize', 14))
+        # Add model information to title
+        if model_types:
+            ax.set_title(f'Average Model Performance by Sector\n(Averaged across {model_types_str})',
+                        fontsize=self.config.get('title_fontsize', 14))
+        else:
+            ax.set_title('Average Model Performance by Sector', 
+                        fontsize=self.config.get('title_fontsize', 14))
         ax.set_ylabel('Mean RMSE (lower is better)')
         ax.set_xlabel('Sector')
         
@@ -569,6 +578,10 @@ class SectorPerformanceComparison(BaseViz):
         # Increase figure size for larger subplots
         fig, axes = plt.subplots(1, 2, figsize=self.config.get('figsize', (20, 10)))
         
+        # Get unique model types from the data
+        model_types = sorted(self.metrics_df['type'].unique()) if 'type' in self.metrics_df.columns else []
+        model_types_str = ', '.join(model_types) if model_types else 'All Models'
+        
         # RMSE by sector
         ax = axes[0]
         if sns is not None:
@@ -582,6 +595,12 @@ class SectorPerformanceComparison(BaseViz):
         ax.set_title('RMSE Distribution by Sector', fontsize=12)  # Reduced from 14
         ax.set_xlabel('Sector', fontsize=10)
         ax.set_ylabel('RMSE (lower is better)', fontsize=10)
+        
+        # Add annotation about model types
+        if model_types:
+            ax.text(0.02, 0.98, f'Models included: {model_types_str}', 
+                    transform=ax.transAxes, fontsize=10, verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8))
         # Rotate x-axis labels with smaller font
         plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=8)
         plt.setp(ax.get_yticklabels(), fontsize=8)
@@ -599,9 +618,21 @@ class SectorPerformanceComparison(BaseViz):
         ax.set_title('R² Distribution by Sector', fontsize=12)  # Reduced from 14
         ax.set_xlabel('Sector', fontsize=10)
         ax.set_ylabel('R² (higher is better)', fontsize=10)
+        
+        # Add annotation about model types
+        if model_types:
+            ax.text(0.02, 0.98, f'Models included: {model_types_str}', 
+                    transform=ax.transAxes, fontsize=10, verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8))
+        
         # Rotate x-axis labels with smaller font
         plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=8)
         plt.setp(ax.get_yticklabels(), fontsize=8)
+        
+        # Add main title with model information
+        if model_types:
+            fig.suptitle(f'Sector Performance Comparison Across {len(model_types)} Model Types\n({model_types_str})', 
+                         fontsize=16, fontweight='bold')
         
         # Increase padding between subplots
         plt.tight_layout(pad=2.0)

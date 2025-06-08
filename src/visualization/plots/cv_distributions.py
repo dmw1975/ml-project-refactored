@@ -79,14 +79,15 @@ class CVDistributionPlot(ComparativeViz):
                 rmse_scores = np.sqrt(np.array(raw_data['cv_mse']))
         
         # Try adapter's cv_scores attribute if available
-        if rmse_scores is None and hasattr(model.data, 'cv_scores') and model.data.cv_scores is not None:
-            cv_scores = model.data.cv_scores
-            if isinstance(cv_scores, (list, np.ndarray)) and len(cv_scores) > 0:
-                rmse_scores = np.array(cv_scores)
-        
-        # Try adapter's cv_mse attribute if available
-        if rmse_scores is None and hasattr(model.data, 'cv_mse') and model.data.cv_mse is not None:
-            rmse_scores = np.sqrt(np.array(model.data.cv_mse))
+        if rmse_scores is None and hasattr(model, 'data'):
+            if hasattr(model.data, 'cv_scores') and model.data.cv_scores is not None:
+                cv_scores = model.data.cv_scores
+                if isinstance(cv_scores, (list, np.ndarray)) and len(cv_scores) > 0:
+                    rmse_scores = np.array(cv_scores)
+            
+            # Try adapter's cv_mse attribute if available
+            elif hasattr(model.data, 'cv_mse') and model.data.cv_mse is not None:
+                rmse_scores = np.sqrt(np.array(model.data.cv_mse))
         
         # For linear models, check if they have cv_results stored
         if rmse_scores is None and adapter.get_model_type() in ['Linear Regression', 'ElasticNet']:
@@ -433,7 +434,7 @@ class CVDistributionPlot(ComparativeViz):
                     sys.path.append(str(project_root))
                     
                 # Import settings
-                from config import settings
+                from src.config import settings
                 
                 # Use default output directory
                 output_dir = settings.VISUALIZATION_DIR / "performance" / "cv_distributions"

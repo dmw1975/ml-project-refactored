@@ -1,0 +1,66 @@
+{
+  "pipeline_id": "20250608_101439",
+  "start_time": "2025-06-08T10:14:39.669715",
+  "end_time": "2025-06-08T11:35:50.578039",
+  "stages": {
+    "initialization": {
+      "status": "failed",
+      "start_time": "2025-06-08T10:14:39.669754",
+      "end_time": "2025-06-08T11:35:50.578025",
+      "details": {},
+      "errors": [
+        {
+          "time": "2025-06-08T11:35:50.578034",
+          "message": "Pipeline interrupted"
+        }
+      ]
+    },
+    "training": {
+      "status": "not_started",
+      "start_time": null,
+      "end_time": null,
+      "details": {},
+      "errors": []
+    },
+    "evaluation": {
+      "status": "not_started",
+      "start_time": null,
+      "end_time": null,
+      "details": {},
+      "errors": []
+    },
+    "statistical_tests": {
+      "status": "not_started",
+      "start_time": null,
+      "end_time": null,
+      "details": {},
+      "errors": []
+    },
+    "visualization": {
+      "status": "not_started",
+      "start_time": null,
+      "end_time": null,
+      "details": {},
+      "errors": []
+    },
+    "completion": {
+      "status": "not_started",
+      "start_time": null,
+      "end_time": null,
+      "details": {},
+      "errors": []
+    }
+  },
+  "model_counts": {
+    "expected": {},
+    "completed": {
+      "linear_regression": 1,
+      "elasticnet": 1
+    }
+  },
+  "outputs": {
+    "models": [],
+    "visualizations": [],
+    "reports": []
+  }
+}

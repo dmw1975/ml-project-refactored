@@ -11,9 +11,9 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
-from config import settings
-from utils import io
-from data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+from src.config import settings
+from src.utils import io
+from src.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
 
 def calculate_permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42):
     """Calculate permutation importance for a model."""

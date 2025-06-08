@@ -1,0 +1,364 @@
+feature,importance
+top_3_shareholder_percentage,469.7383733987808
+hist_rd_exp_usd,373.1465711593628
+hist_fcf_yld,170.30570936203003
+random_feature,166.6990602016449
+top_1_shareholder_percentage,121.67094945907593
+hist_gross_profit_usd,118.66809046268463
+hist_net_chg_lt_debt_usd,107.88206315040588
+return_usd,106.114830493927
+top_2_shareholder_percentage,105.7255791425705
+hist_capex_sales,93.30413067340851
+net_income_usd,84.52804124355316
+hist_book_px,83.71104919910431
+beta,69.57767128944397
+shares_outstanding,67.03324925899506
+hist_pe,63.53693962097168
+hist_asset_turnover,62.32002115249634
+market_cap_usd,62.24563121795654
+vola,61.20897889137268
+hist_roa,58.12446987628937
+hist_roe,56.78846979141235
+hist_capex_depr,55.856589555740356
+hist_ev_usd,53.82500910758972
+hist_eps_usd,37.137409925460815
+cntry_of_risk_US,32.4564905166626
+shares_float,32.256969809532166
+top_1_shareholder_location_United States,32.21072030067444
+hist_net_debt_usd,27.226409435272217
+hist_roic,18.705039739608765
+gics_sub_ind_Application Software,17.06512975692749
+hist_ebitda_ev,11.265890002250671
+top_3_shareholder_location_Luxembourg,5.928329944610596
+top_2_shareholder_location_Luxembourg,4.286970138549805
+top_1_shareholder_location_Japan,1.9074000120162964
+gics_sub_ind_Rail Transportation,0.0
+gics_sub_ind_Publishing,0.0
+gics_sub_ind_Property & Casualty Insurance,0.0
+gics_sub_ind_Paper & Plastic Packaging Products & Materials,0.0
+gics_sub_ind_Paper Products,0.0
+gics_sub_ind_Passenger Airlines,0.0
+gics_sub_ind_Oil & Gas Exploration & Production,0.0
+gics_sub_ind_Passenger Ground Transportation,0.0
+gics_sub_ind_Oil & Gas Storage & Transportation,0.0
+gics_sub_ind_Other Specialty Retail,0.0
+gics_sub_ind_Packaged Foods & Meats,0.0
+gics_sub_ind_Personal Care Products,0.0
+gics_sub_ind_Precious Metals & Minerals,0.0
+gics_sub_ind_Pharmaceuticals,0.0
+gics_sub_ind_Real Estate Development,0.0
+gics_sub_ind_Oil & Gas Refining & Marketing,0.0
+gics_sub_ind_Specialized Consumer Services,0.0
+gics_sub_ind_Specialized Finance,0.0
+gics_sub_ind_Soft Drinks & Non-alcoholic Beverages,0.0
+gics_sub_ind_Silver,0.0
+gics_sub_ind_Semiconductors,0.0
+gics_sub_ind_Semiconductor Materials & Equipment,0.0
+gics_sub_ind_Security & Alarm Services,0.0
+gics_sub_ind_Restaurants,0.0
+gics_sub_ind_Research & Consulting Services,0.0
+gics_sub_ind_Oil & Gas Equipment & Services,0.0
+gics_sub_ind_Specialty Chemicals,0.0
+gics_sub_ind_Steel,0.0
+gics_sub_ind_Systems Software,0.0
+"gics_sub_ind_Technology Hardware, Storage & Peripherals",0.0
+gics_sub_ind_Oil & Gas Drilling,0.0
+gics_sub_ind_Reinsurance,0.0
+gics_sub_ind_Regional Banks,0.0
+gics_sub_ind_Real Estate Services,0.0
+gics_sub_ind_Real Estate Operating Companies,0.0
+gics_sub_ind_Renewable Electricity,0.0
+gics_sub_ind_Insurance Brokers,0.0
+gics_sub_ind_Industrial Machinery & Supplies & Components,0.0
+gics_sub_ind_Industrial Gases,0.0
+gics_sub_ind_Industrial Conglomerates,0.0
+gics_sub_ind_Independent Power Producers & Energy Traders,0.0
+gics_sub_ind_IT Consulting & Other Services,0.0
+gics_sub_ind_Human Resource & Employment Services,0.0
+gics_sub_ind_Housewares & Specialties,0.0
+gics_sub_ind_Household Products,0.0
+gics_sub_ind_Technology Distributors,0.0
+"gics_sub_ind_Hotels, Resorts & Cruise Lines",0.0
+gics_sub_ind_Homefurnishing Retail,0.0
+gics_sub_ind_Homebuilding,0.0
+gics_sub_ind_Home Improvement Retail,0.0
+gics_sub_ind_Home Furnishings,0.0
+gics_sub_ind_Highways & Railtracks,0.0
+gics_sub_ind_Heavy Electrical Equipment,0.0
+gics_sub_ind_Health Care Technology,0.0
+gics_sub_ind_Health Care Services,0.0
+gics_sub_ind_Household Appliances,0.0
+gics_sub_ind_Office Services & Supplies,0.0
+gics_sub_ind_Multi-line Insurance,0.0
+gics_sub_ind_Multi-Utilities,0.0
+gics_sub_ind_Multi-Sector Holdings,0.0
+gics_sub_ind_Movies & Entertainment,0.0
+gics_sub_ind_Motorcycle Manufacturers,0.0
+"gics_sub_ind_Metal, Glass & Plastic Containers",0.0
+gics_sub_ind_Marine Transportation,0.0
+gics_sub_ind_Marine Ports & Services,0.0
+gics_sub_ind_Integrated Oil & Gas,0.0
+gics_sub_ind_Life Sciences Tools & Services,0.0
+gics_sub_ind_Life & Health Insurance,0.0
+gics_sub_ind_Leisure Products,0.0
+gics_sub_ind_Leisure Facilities,0.0
+gics_sub_ind_Investment Banking & Brokerage,0.0
+gics_sub_ind_Internet Services & Infrastructure,0.0
+gics_sub_ind_Interactive Media & Services,0.0
+gics_sub_ind_Interactive Home Entertainment,0.0
+gics_sub_ind_Integrated Telecommunication Services,0.0
+gics_sub_ind_Managed Health Care,0.0
+top_3_shareholder_location_Spain,0.0
+top_3_shareholder_location_South Korea,0.0
+top_3_shareholder_location_Singapore,0.0
+top_3_shareholder_location_Portugal,0.0
+top_3_shareholder_location_Poland,0.0
+top_3_shareholder_location_Panama,0.0
+top_3_shareholder_location_Not Available,0.0
+top_3_shareholder_location_Norway,0.0
+gics_sub_ind_Health Care Supplies,0.0
+top_3_shareholder_location_Namibia,0.0
+top_3_shareholder_location_Liechtenstein,0.0
+top_3_shareholder_location_Japan,0.0
+top_3_shareholder_location_Israel,0.0
+top_3_shareholder_location_Ireland,0.0
+top_3_shareholder_location_Indonesia,0.0
+top_3_shareholder_location_Hong Kong,0.0
+top_3_shareholder_location_Guernsey,0.0
+top_3_shareholder_location_Greece,0.0
+top_3_shareholder_location_New Zealand,0.0
+issuer_cntry_domicile_name_Indonesia,0.0
+issuer_cntry_domicile_name_India,0.0
+issuer_cntry_domicile_name_Hong Kong,0.0
+issuer_cntry_domicile_name_Greece,0.0
+issuer_cntry_domicile_name_Germany,0.0
+issuer_cntry_domicile_name_France,0.0
+issuer_cntry_domicile_name_Finland,0.0
+issuer_cntry_domicile_name_Denmark,0.0
+issuer_cntry_domicile_name_China,0.0
+top_3_shareholder_location_Sweden,0.0
+issuer_cntry_domicile_name_Canada,0.0
+issuer_cntry_domicile_name_Brazil,0.0
+issuer_cntry_domicile_name_Bermuda,0.0
+issuer_cntry_domicile_name_Belgium,0.0
+issuer_cntry_domicile_name_Austria,0.0
+top_3_shareholder_location_Belgium,0.0
+top_3_shareholder_location_United States,0.0
+top_3_shareholder_location_United Kingdom,0.0
+top_3_shareholder_location_Switzerland,0.0
+issuer_cntry_domicile_name_Cayman Islands,0.0
+top_1_shareholder_location_Norway,0.0
+top_1_shareholder_location_Mexico,0.0
+top_1_shareholder_location_Luxembourg,0.0
+top_1_shareholder_location_Israel,0.0
+top_1_shareholder_location_Ireland,0.0
+top_1_shareholder_location_India,0.0
+top_1_shareholder_location_Germany,0.0
+top_1_shareholder_location_France,0.0
+top_1_shareholder_location_China,0.0
+issuer_cntry_domicile_name_Isle of Man,0.0
+top_1_shareholder_location_Brazil,0.0
+top_1_shareholder_location_Belgium,0.0
+top_1_shareholder_location_Australia,0.0
+gics_sub_ind_Wireless Telecommunication Services,0.0
+gics_sub_ind_Water Utilities,0.0
+gics_sub_ind_Transaction & Payment Processing Services,0.0
+gics_sub_ind_Trading Companies & Distributors,0.0
+gics_sub_ind_Tobacco,0.0
+gics_sub_ind_Tires & Rubber,0.0
+top_1_shareholder_location_Canada,0.0
+top_3_shareholder_location_France,0.0
+top_3_shareholder_location_Finland,0.0
+top_3_shareholder_location_Denmark,0.0
+top_3_shareholder_location_China,0.0
+top_3_shareholder_location_Cayman Islands,0.0
+top_3_shareholder_location_Canada,0.0
+top_3_shareholder_location_Bermuda,0.0
+top_2_shareholder_location_Canada,0.0
+top_2_shareholder_location_Brazil,0.0
+top_1_shareholder_location_South Africa,0.0
+top_2_shareholder_location_Austria,0.0
+top_2_shareholder_location_Australia,0.0
+top_1_shareholder_location_United Kingdom,0.0
+top_1_shareholder_location_Turkey,0.0
+top_1_shareholder_location_Thailand,0.0
+top_1_shareholder_location_Taiwan,0.0
+top_1_shareholder_location_Switzerland,0.0
+top_1_shareholder_location_Sweden,0.0
+top_1_shareholder_location_Spain,0.0
+top_2_shareholder_location_Belgium,0.0
+cntry_of_risk_CL,0.0
+cntry_of_risk_CH,0.0
+cntry_of_risk_CA,0.0
+cntry_of_risk_BR,0.0
+cntry_of_risk_BM,0.0
+cntry_of_risk_BF,0.0
+cntry_of_risk_BE,0.0
+cntry_of_risk_AU,0.0
+issuer_cntry_domicile_name_Uruguay,0.0
+issuer_cntry_domicile_name_Ireland,0.0
+issuer_cntry_domicile_name_United Kingdom,0.0
+issuer_cntry_domicile_name_Turkey,0.0
+issuer_cntry_domicile_name_Thailand,0.0
+issuer_cntry_domicile_name_Taiwan,0.0
+issuer_cntry_domicile_name_Switzerland,0.0
+issuer_cntry_domicile_name_Sweden,0.0
+issuer_cntry_domicile_name_Spain,0.0
+issuer_cntry_domicile_name_South Korea,0.0
+issuer_cntry_domicile_name_South Africa,0.0
+issuer_cntry_domicile_name_Singapore,0.0
+issuer_cntry_domicile_name_United States of America,0.0
+cntry_of_risk_MX,0.0
+cntry_of_risk_MO,0.0
+cntry_of_risk_LU,0.0
+cntry_of_risk_KZ,0.0
+cntry_of_risk_KR,0.0
+cntry_of_risk_JP,0.0
+cntry_of_risk_JO,0.0
+cntry_of_risk_IT,0.0
+cntry_of_risk_IN,0.0
+cntry_of_risk_IL,0.0
+cntry_of_risk_CN,0.0
+cntry_of_risk_ID,0.0
+cntry_of_risk_HK,0.0
+cntry_of_risk_GR,0.0
+cntry_of_risk_GH,0.0
+cntry_of_risk_GB,0.0
+cntry_of_risk_FR,0.0
+cntry_of_risk_FI,0.0
+cntry_of_risk_ES,0.0
+cntry_of_risk_DK,0.0
+cntry_of_risk_DE,0.0
+cntry_of_risk_IE,0.0
+top_2_shareholder_location_Spain,0.0
+top_2_shareholder_location_South Korea,0.0
+top_2_shareholder_location_South Africa,0.0
+top_2_shareholder_location_Singapore,0.0
+top_2_shareholder_location_Romania,0.0
+top_2_shareholder_location_Norway,0.0
+top_2_shareholder_location_New Zealand,0.0
+top_2_shareholder_location_Netherlands,0.0
+top_2_shareholder_location_Malaysia,0.0
+top_2_shareholder_location_Liechtenstein,0.0
+issuer_cntry_domicile_name_Portugal,0.0
+top_2_shareholder_location_Italy,0.0
+top_2_shareholder_location_Israel,0.0
+top_2_shareholder_location_Hong Kong,0.0
+top_2_shareholder_location_Greece,0.0
+top_2_shareholder_location_Germany,0.0
+top_2_shareholder_location_France,0.0
+top_2_shareholder_location_Finland,0.0
+top_2_shareholder_location_China,0.0
+top_2_shareholder_location_Cayman Islands,0.0
+top_2_shareholder_location_Ireland,0.0
+top_2_shareholder_location_Japan,0.0
+issuer_cntry_domicile_name_Norway,0.0
+issuer_cntry_domicile_name_New Zealand,0.0
+issuer_cntry_domicile_name_Netherlands,0.0
+issuer_cntry_domicile_name_Mexico,0.0
+issuer_cntry_domicile_name_Malaysia,0.0
+issuer_cntry_domicile_name_Macau,0.0
+issuer_cntry_domicile_name_Luxembourg,0.0
+issuer_cntry_domicile_name_Kazakhstan,0.0
+issuer_cntry_domicile_name_Japan,0.0
+issuer_cntry_domicile_name_JERSEY,0.0
+top_2_shareholder_location_Sweden,0.0
+issuer_cntry_domicile_name_Israel,0.0
+top_3_shareholder_location_Germany,0.0
+top_3_shareholder_location_Bahamas,0.0
+top_3_shareholder_location_Austria,0.0
+top_3_shareholder_location_Australia,0.0
+top_2_shareholder_location_United States,0.0
+top_2_shareholder_location_United Kingdom,0.0
+top_2_shareholder_location_Turkey,0.0
+top_2_shareholder_location_Taiwan,0.0
+top_2_shareholder_location_Switzerland,0.0
+issuer_cntry_domicile_name_Italy,0.0
+gics_sub_ind_Diversified Financial Services,0.0
+gics_sub_ind_Diversified Chemicals,0.0
+gics_sub_ind_Diversified Capital Markets,0.0
+gics_sub_ind_Diversified Banks,0.0
+gics_sub_ind_Distributors,0.0
+gics_sub_ind_Distillers & Vintners,0.0
+gics_sub_ind_Data Processing & Outsourced Services,0.0
+gics_sub_ind_Copper,0.0
+gics_sub_ind_Consumer Staples Merchandise Retail,0.0
+gics_sub_ind_Consumer Finance,0.0
+cntry_of_risk_MY,0.0
+gics_sub_ind_Construction Materials,0.0
+gics_sub_ind_Construction Machinery & Heavy Transportation Equipment,0.0
+gics_sub_ind_Construction & Engineering,0.0
+gics_sub_ind_Computer & Electronics Retail,0.0
+gics_sub_ind_Communications Equipment,0.0
+gics_sub_ind_Commodity Chemicals,0.0
+gics_sub_ind_Commercial Printing,0.0
+gics_sub_ind_Commercial & Residential Mortgage Finance,0.0
+gics_sub_ind_Coal & Consumable Fuels,0.0
+gics_sub_ind_Casinos & Gaming,0.0
+gics_sub_ind_Consumer Electronics,0.0
+gics_sub_ind_Health Care Facilities,0.0
+gics_sub_ind_Health Care Equipment,0.0
+gics_sub_ind_Health Care Distributors,0.0
+gics_sub_ind_Gold,0.0
+gics_sub_ind_Gas Utilities,0.0
+gics_sub_ind_Forest Products,0.0
+gics_sub_ind_Footwear,0.0
+gics_sub_ind_Food Retail,0.0
+gics_sub_ind_Food Distributors,0.0
+gics_sub_ind_Financial Exchanges & Data,0.0
+gics_sub_ind_Diversified Metals & Mining,0.0
+gics_sub_ind_Environmental & Facilities Services,0.0
+gics_sub_ind_Electronic Manufacturing Services,0.0
+gics_sub_ind_Electronic Equipment & Instruments,0.0
+gics_sub_ind_Electronic Components,0.0
+gics_sub_ind_Electrical Components & Equipment,0.0
+gics_sub_ind_Electric Utilities,0.0
+gics_sub_ind_Education Services,0.0
+gics_sub_ind_Drug Retail,0.0
+gics_sub_ind_Diversified Support Services,0.0
+gics_sub_ind_Diversified Real Estate Activities,0.0
+gics_sub_ind_Fertilizers & Agricultural Chemicals,0.0
+gics_sector_Information Technology,0.0
+gics_sector_Industrials,0.0
+gics_sector_Health Care,0.0
+gics_sector_Financials,0.0
+gics_sector_Energy,0.0
+gics_sector_Consumer Staples,0.0
+gics_sector_Consumer Discretionary,0.0
+cntry_of_risk_ZM,0.0
+cntry_of_risk_ZA,0.0
+cntry_of_risk_TW,0.0
+gics_sub_ind_Cargo Ground Transportation,0.0
+cntry_of_risk_TH,0.0
+cntry_of_risk_SG,0.0
+cntry_of_risk_SE,0.0
+cntry_of_risk_RU,0.0
+cntry_of_risk_PT,0.0
+cntry_of_risk_PR,0.0
+cntry_of_risk_PL,0.0
+cntry_of_risk_NZ,0.0
+cntry_of_risk_NO,0.0
+cntry_of_risk_NL,0.0
+cntry_of_risk_TR,0.0
+gics_sub_ind_Cable & Satellite,0.0
+gics_sub_ind_Building Products,0.0
+gics_sub_ind_Broadline Retail,0.0
+gics_sub_ind_Broadcasting,0.0
+gics_sub_ind_Brewers,0.0
+gics_sub_ind_Biotechnology,0.0
+gics_sub_ind_Automotive Retail,0.0
+gics_sub_ind_Automotive Parts & Equipment,0.0
+gics_sub_ind_Automobile Manufacturers,0.0
+gics_sub_ind_Asset Management & Custody Banks,0.0
+gics_sector_Materials,0.0
+gics_sub_ind_Apparel Retail,0.0
+gics_sub_ind_Aluminum,0.0
+gics_sub_ind_Alternative Carriers,0.0
+gics_sub_ind_Airport Services,0.0
+gics_sub_ind_Air Freight & Logistics,0.0
+gics_sub_ind_Agricultural Products & Services,0.0
+gics_sub_ind_Agricultural & Farm Machinery,0.0
+gics_sub_ind_Aerospace & Defense,0.0
+gics_sector_Utilities,0.0
+gics_sector_Real Estate,0.0
+"gics_sub_ind_Apparel, Accessories & Luxury Goods",0.0

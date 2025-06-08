@@ -312,13 +312,10 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
         )
         
         if baseline_plots:
-            # Add baseline significance plots to our tracking
-            baseline_stat_paths = []
-            for plot_name, plot_path in baseline_plots.items():
-                if plot_path and Path(plot_path).exists():
-                    baseline_stat_paths.append(plot_path)
-            all_visualizations['baseline_significance'] = baseline_stat_paths
-            log_viz_step("STATISTICAL_TESTS", f"Created {len(baseline_stat_paths)} baseline significance plots")
+            # baseline_plots contains Figure objects, not paths
+            # The plots are already saved inside plot_cv_baseline_tests
+            baseline_stat_count = len([fig for fig in baseline_plots.values() if fig is not None])
+            log_viz_step("STATISTICAL_TESTS", f"Created {baseline_stat_count} baseline significance plots")
             
     except Exception as e:
         log_viz_step("STATISTICAL_TESTS", f"Error: {e}", is_error=True)
@@ -331,38 +328,9 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
     try:
         from .plots.baselines import visualize_all_baseline_comparisons, create_metric_baseline_comparison
         
-        # Create consolidated plots
+        # Create consolidated plots only - removes duplicate generation
         baseline_paths = visualize_all_baseline_comparisons()
         all_visualizations['baseline_comparison'] = baseline_paths if isinstance(baseline_paths, list) else [baseline_paths]
-        
-        # Also create individual metric baseline comparison plots
-        from ..config.settings import METRICS_DIR
-        baseline_data_path = METRICS_DIR / "baseline_comparison.csv"
-        
-        if baseline_data_path.exists():
-            output_dir = visualization_dir / "baselines"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Create plots for each metric and baseline type
-            metrics = ['RMSE', 'MAE', 'R²']
-            baseline_types = ['Random', 'Mean', 'Median']
-            
-            for metric in metrics:
-                # Create a single plot that shows all baseline types for this metric
-                try:
-                    output_path = output_dir / f"baseline_comparison_{metric}.png"
-                    # This will create a plot showing Random baseline comparison
-                    create_metric_baseline_comparison(
-                        baseline_data_path=str(baseline_data_path),
-                        output_path=str(output_path),
-                        metric=metric,
-                        baseline_type='Random'  # Default to Random for main comparison
-                    )
-                    log_viz_step("BASELINE_COMPARISON", f"Created baseline comparison plot for {metric}")
-                except Exception as e:
-                    log_viz_step("BASELINE_COMPARISON", f"Error creating baseline comparison for {metric}: {e}", is_error=True)
-        else:
-            log_viz_step("BASELINE_COMPARISON", "No baseline comparison data found - run baseline evaluation first")
             
         viz_times['baseline_comparison'] = time.time() - step_start
         log_viz_step("BASELINE_COMPARISON", f"Created baseline comparison plots")
@@ -478,12 +446,15 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
                 elif p is not None:
                     count += 1
         elif isinstance(paths, list):
-            # Handle list of paths
+            # Handle list of paths or figures
             count = 0
             for p in paths:
-                # Skip Figure objects and None values
-                if p is not None and not hasattr(p, 'figure'):
-                    count += 1
+                # Count Figure objects and path strings
+                if p is not None:
+                    if hasattr(p, 'savefig'):  # It's a Figure object
+                        count += 1
+                    elif isinstance(p, (str, Path)):  # It's a file path
+                        count += 1
         else:
             # Handle single path or object
             count = 1 if paths and not hasattr(paths, 'figure') else 0
