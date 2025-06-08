@@ -332,3 +332,15 @@ scripts/utilities/generate_*.py
 # ==============================================================================
 # End of .gitignore
 # ==============================================================================
+# Local archive directory (not for GitHub)
+archive/
+
+
+# Cleanup files
+all_python_files.txt
+perform_cleanup.py
+cleanup_analysis.md
+CLEANUP_EXECUTION_PLAN.md
+INTEGRATION_NOTES.md
+README_old.md
+
