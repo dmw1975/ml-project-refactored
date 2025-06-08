@@ -1,5 +1,0 @@
-model_name,random_rank,random_importance,total_features,percentile
-LR_Base_Random,363,0.0011415441334006182,363,100.0
-LR_Yeo_Random,363,0.0010949923181638565,363,100.0
-ElasticNet_LR_Base_Random_optuna,363,0.0015723884460588922,363,100.0
-ElasticNet_LR_Yeo_Random_optuna,363,0.0014265577819952192,363,100.0
