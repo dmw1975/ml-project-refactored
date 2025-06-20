@@ -8,8 +8,6 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from scripts.archive.enhanced_xgboost_categorical import train_enhanced_xgboost_categorical
 from src.data.data_categorical import load_tree_models_data, get_categorical_features
-from src.data.data import get_base_and_yeo_features, add_random_feature
-import pandas as pd
 import numpy as np
 import pickle
 from src.config import settings
@@ -100,9 +98,12 @@ def train_xgboost_categorical_models(datasets=['all']):
                 all_results[model_key] = model_data
                 
         except Exception as e:
-            print(f"Error training XGBoost on {dataset_name}: {e}")
+            print(f"\n❌ ERROR training XGBoost on {dataset_name}: {e}")
+            print("Full traceback:")
             import traceback
             traceback.print_exc()
+            print(f"\nContinuing with next dataset...")
+            print("-" * 60)
     
     # Save combined results
     if all_results:

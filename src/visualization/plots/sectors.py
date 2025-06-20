@@ -41,16 +41,21 @@ if str(project_root) not in sys.path:
 from src.config import settings
 
 
-def create_sector_stratification_plot(output_dir):
+def create_sector_stratification_plot(output_dir=None):
     """
     Create sector stratification plot showing train/test distribution.
     
     Args:
-        output_dir: Directory to save the plot
+        output_dir: Directory to save the plot. If None, uses stratified folder.
         
     Returns:
         bool: True if successful
     """
+    # Use stratified folder as default output directory
+    if output_dir is None:
+        output_dir = settings.VISUALIZATION_DIR / "stratified"
+        ensure_dir(output_dir)
+    
     # Check if we have saved relative distribution data first
     rel_dist_file = Path(settings.DATA_DIR) / 'processed' / 'sector_distribution_relative.csv'
     if rel_dist_file.exists():
@@ -241,15 +246,17 @@ def create_sector_stratification_plot_compute(output_dir):
 def create_sector_stratification_plot_lightgbm(output_dir):
     """
     Create LightGBM-specific sector stratification plot.
-    Now redirects to use actual data instead of synthetic.
+    Now redirects to the general stratification plot in stratified folder.
     
     Args:
-        output_dir: Directory to save the plot
+        output_dir: Directory to save the plot (ignored, uses stratified folder)
         
     Returns:
         bool: True if successful
     """
-    return create_sector_stratification_plot(output_dir)
+    # Always use the stratified folder to avoid duplication
+    stratified_dir = settings.VISUALIZATION_DIR / "stratified"
+    return create_sector_stratification_plot(stratified_dir)
 
 
 class SectorPerformanceComparison(BaseViz):
@@ -381,13 +388,18 @@ class SectorPerformanceComparison(BaseViz):
             if output_dir is None:
                 output_dir = settings.VISUALIZATION_DIR / "sectors"
             
-            save_figure(
-                fig=fig,
-                filename="sector_performance_comparison",
-                output_dir=output_dir,
-                dpi=self.config.get('dpi', 300),
-                format=self.config.get('format', 'png')
-            )
+            # Skip saving to main sectors folder
+            output_dir_str = str(output_dir)
+            if output_dir_str.endswith('sectors') and not ('lightgbm' in output_dir_str or 'elasticnet' in output_dir_str):
+                print(f"Skipping sector_performance_comparison save to main sectors folder")
+            else:
+                save_figure(
+                    fig=fig,
+                    filename="sector_performance_comparison",
+                    output_dir=output_dir,
+                    dpi=self.config.get('dpi', 300),
+                    format=self.config.get('format', 'png')
+                )
         
         # Show figure if requested
         if self.config.get('show', False):
@@ -455,13 +467,18 @@ class SectorPerformanceComparison(BaseViz):
                 if output_dir is None:
                     output_dir = settings.VISUALIZATION_DIR / "sectors"
                 
-                save_figure(
-                    fig=fig,
-                    filename="sector_model_type_heatmap",
-                    output_dir=output_dir,
-                    dpi=self.config.get('dpi', 300),
-                    format=self.config.get('format', 'png')
-                )
+                # Skip saving to main sectors folder
+                output_dir_str = str(output_dir)
+                if output_dir_str.endswith('sectors') and not ('lightgbm' in output_dir_str or 'elasticnet' in output_dir_str):
+                    print(f"Skipping sector_model_type_heatmap save to main sectors folder")
+                else:
+                    save_figure(
+                        fig=fig,
+                        filename="sector_model_type_heatmap",
+                        output_dir=output_dir,
+                        dpi=self.config.get('dpi', 300),
+                        format=self.config.get('format', 'png')
+                    )
             
             # Show figure if requested
             if self.config.get('show', False):
@@ -643,13 +660,18 @@ class SectorPerformanceComparison(BaseViz):
             if output_dir is None:
                 output_dir = settings.VISUALIZATION_DIR / "sectors"
             
-            save_figure(
-                fig=fig,
-                filename="sector_performance_boxplots",
-                output_dir=output_dir,
-                dpi=self.config.get('dpi', 300),
-                format=self.config.get('format', 'png')
-            )
+            # Skip saving to main sectors folder
+            output_dir_str = str(output_dir)
+            if output_dir_str.endswith('sectors') and not ('lightgbm' in output_dir_str or 'elasticnet' in output_dir_str):
+                print(f"Skipping sector_performance_boxplots save to main sectors folder")
+            else:
+                save_figure(
+                    fig=fig,
+                    filename="sector_performance_boxplots",
+                    output_dir=output_dir,
+                    dpi=self.config.get('dpi', 300),
+                    format=self.config.get('format', 'png')
+                )
         
         # Show figure if requested
         if self.config.get('show', False):
@@ -858,13 +880,18 @@ class SectorMetricsTable(BaseViz):
             if output_dir is None:
                 output_dir = settings.VISUALIZATION_DIR / "sectors"
             
-            save_figure(
-                fig=fig,
-                filename="sector_metrics_summary_table",
-                output_dir=output_dir,
-                dpi=self.config.get('dpi', 300),
-                format=self.config.get('format', 'png')
-            )
+            # Skip saving to main sectors folder
+            output_dir_str = str(output_dir)
+            if output_dir_str.endswith('sectors') and not ('lightgbm' in output_dir_str or 'elasticnet' in output_dir_str):
+                print(f"Skipping sector_metrics_summary_table save to main sectors folder")
+            else:
+                save_figure(
+                    fig=fig,
+                    filename="sector_metrics_summary_table",
+                    output_dir=output_dir,
+                    dpi=self.config.get('dpi', 300),
+                    format=self.config.get('format', 'png')
+                )
         
         # Show figure if requested
         if self.config.get('show', False):
@@ -968,13 +995,9 @@ def visualize_lightgbm_sector_plots(
     # 2. Sector Metrics Table
     figures['metrics_table'] = plot_sector_metrics_table(metrics_df, config)
     
-    # 3. Train/Test Distribution (LightGBM-specific version)
-    try:
-        stratification_success = create_sector_stratification_plot_lightgbm(config.get('output_dir'))
-        if stratification_success:
-            figures['sector_train_test_distribution'] = 'generated'
-    except Exception as e:
-        print(f"Error creating train/test distribution plot: {e}")
+    # 3. Train/Test Distribution (Skip for LightGBM to avoid duplication)
+    # The general stratification plot is created in the stratified folder
+    print("Skipping stratification plot for LightGBM (using general version in stratified folder)")
     
     print(f"Generated {len(figures)} LightGBM sector visualization plots")
     print(f"All LightGBM sector visualizations saved to {config.get('output_dir')}")
@@ -1018,10 +1041,13 @@ def visualize_all_sector_plots(
     
     # 3. Train/Test Distribution Plot
     try:
-        # Create sector stratification plot (general version, not LightGBM-specific)
-        stratification_success = create_sector_stratification_plot(config.get('output_dir'))
+        # Create sector stratification plot in stratified folder
+        stratified_dir = settings.VISUALIZATION_DIR / "stratified"
+        ensure_dir(stratified_dir)
+        stratification_success = create_sector_stratification_plot(stratified_dir)
         if stratification_success:
             figures['sector_train_test_distribution'] = 'generated'
+            print(f"Stratification plot saved to: {stratified_dir}")
     except Exception as e:
         print(f"Error creating train/test distribution plot: {e}")
     

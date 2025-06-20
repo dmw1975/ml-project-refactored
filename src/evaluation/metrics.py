@@ -122,8 +122,9 @@ def calculate_residuals(all_models):
             'y_pred': y_pred_values
         }
     
-    # Save residuals
-    io.save_model(residuals, "model_residuals.pkl", settings.METRICS_DIR)
+    # Removed model_residuals.pkl generation - Analysis showed this file is NEVER READ
+    # Residuals are calculated on-the-fly from y_test/y_pred in model PKL files - Date: 2025-01-15
+    # io.save_model(residuals, "model_residuals.pkl", settings.METRICS_DIR)
     
     return residuals
 
@@ -216,18 +217,26 @@ def create_comparison_table(all_models):
 
 
 def perform_statistical_tests(all_models):
-    """Perform statistical tests to compare serious models with Holm-Bonferroni correction."""
+    """Perform statistical tests to compare optimized models with Holm-Bonferroni correction.
+    
+    Only includes:
+    - Optuna-optimized tree models (models with "_optuna" suffix)
+    - ElasticNet models (which are always optimized)
+    """
     import scipy.stats as stats
     import numpy as np
     import pandas as pd
 
-    # Define allowed serious model types - include all model types
-    allowed_model_types = ['elasticnet', 'xgb', 'catboost', 'lightgbm', 'lr_', 'linear']
-
     def is_allowed(name):
-        name = name.lower()
-        # Check for all allowed types
-        return any(allowed_type in name for allowed_type in allowed_model_types)
+        """Check if model should be included in statistical tests.
+        
+        Requirements:
+        - Include all models with 'optuna' in the name (optimized tree models)
+        - Include all ElasticNet models (they are always optimized)
+        - Exclude basic (non-optimized) tree models
+        """
+        # Include optimized tree models and ElasticNet models
+        return 'optuna' in name or 'ElasticNet' in name
 
     # Filter models - also check if they are dictionaries
     filtered_models = {}
@@ -242,12 +251,25 @@ def perform_statistical_tests(all_models):
     model_names = list(filtered_models.keys())
     n_models = len(model_names)
 
-    print("\nFiltered serious models for statistical testing:")
-    for m in model_names:
-        print(f"  - {m}")
+    print("\nFiltered optimized models for statistical testing:")
+    print(f"Total models after filtering: {n_models}")
+    
+    # Group by type for better display
+    optuna_models = [m for m in model_names if 'optuna' in m]
+    elasticnet_models = [m for m in model_names if 'ElasticNet' in m and 'optuna' not in m]
+    
+    if optuna_models:
+        print("\nOptuna-optimized tree models:")
+        for m in sorted(optuna_models):
+            print(f"  - {m}")
+    
+    if elasticnet_models:
+        print("\nElasticNet models:")
+        for m in sorted(elasticnet_models):
+            print(f"  - {m}")
 
     if n_models < 2:
-        print("Not enough serious models for statistical testing after filtering.")
+        print("Not enough optimized models for statistical testing after filtering.")
         return
 
     all_tests = []

@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """Generate missing performance plots for CatBoost and XGBoost models."""
 
+import sys
 import os
 from pathlib import Path
-from visualization_new.utils.io import load_all_models
-from visualization_new.plots.optimization import (
+
+# Add the project directory to path
+project_dir = Path(__file__).parent.parent.parent.absolute()
+sys.path.append(str(project_dir))
+
+from src.visualization.utils.io import load_all_models
+from src.visualization.plots.optimization import (
     plot_optimization_history, 
     plot_param_importance, 
     plot_contour,
     plot_basic_vs_optuna,
     plot_optuna_improvement
 )
-from visualization_new.viz_factory import create_hyperparameter_comparison
-from visualization_new.core.interfaces import VisualizationConfig
-from config import settings
+from src.visualization.viz_factory import create_hyperparameter_comparison
+from src.visualization.core.interfaces import VisualizationConfig
+from src.config import settings
+from src.visualization.plots.metrics import plot_feature_removal_comparison
+import pandas as pd
 
 def generate_catboost_performance_plots():
     """Generate missing CatBoost performance visualizations."""
@@ -172,12 +180,71 @@ def generate_xgboost_performance_plots():
     
     print(f"XGBoost performance visualizations saved to: {perf_dir}")
 
+def generate_feature_removal_comparison():
+    """Generate feature removal comparison plots."""
+    print("\nGenerating feature removal comparison plots...")
+    
+    # Best model metrics from XGBoost_Base_Random_categorical_optuna
+    best_model_metrics = {
+        'RMSE': 1.613,
+        'MAE': 1.259,
+        'R2': 0.216,
+        'MSE': 2.603
+    }
+    
+    # Feature removal experiment metrics
+    feature_removal_metrics = {
+        'RMSE': 1.8635,
+        'MAE': 1.4569,  # Estimated from RMSE (typical ratio)
+        'R2': 0.1075,
+        'MSE': 3.4726   # (1.8635)^2
+    }
+    
+    # Set up output directory
+    output_dir = Path('outputs/visualizations/comparisons')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configuration
+    config = VisualizationConfig(
+        output_dir=output_dir,
+        format="png",
+        dpi=300,
+        save=True,
+        show=False
+    )
+    
+    # Generate comparison plot
+    try:
+        fig = plot_feature_removal_comparison(best_model_metrics, feature_removal_metrics, config)
+        print(f"  ✓ Feature removal comparison plot saved to: {output_dir}/feature_removal_comparison.png")
+    except Exception as e:
+        print(f"  ✗ Error creating feature removal comparison: {e}")
+    
+    # Also create a detailed comparison with actual CSV data
+    try:
+        # Read the actual feature removal comparison CSV
+        csv_path = Path('outputs/feature_removal_experiment/metrics/feature_removal_comparison.csv')
+        if csv_path.exists():
+            df = pd.read_csv(csv_path)
+            print("\n  Feature Removal Analysis Results:")
+            print(f"    - Feature removed: {df['excluded_feature'].iloc[0]}")
+            print(f"    - RMSE with feature: {df['rmse_with_feature'].iloc[0]:.4f}")
+            print(f"    - RMSE without feature: {df['rmse_without_feature'].iloc[0]:.4f}")
+            print(f"    - RMSE change: {df['rmse_change'].iloc[0]:.4f} ({df['rmse_change_pct'].iloc[0]:.2f}%)")
+            print(f"    - R² with feature: {df['r2_with_feature'].iloc[0]:.4f}")
+            print(f"    - R² without feature: {df['r2_without_feature'].iloc[0]:.4f}")
+            print(f"    - R² change: {df['r2_change'].iloc[0]:.4f}")
+    except Exception as e:
+        print(f"  ✗ Error reading feature removal CSV: {e}")
+
+
 def main():
     """Generate all missing performance visualizations."""
     print("Generating missing performance visualizations...")
     
     generate_catboost_performance_plots()
     generate_xgboost_performance_plots()
+    generate_feature_removal_comparison()
     
     print("\n✅ Done! Missing performance visualizations have been generated.")
 

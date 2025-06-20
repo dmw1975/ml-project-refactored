@@ -309,8 +309,9 @@ def evaluate_sector_models(sector_models=None):
     print("\nCalculating model residuals...")
     residuals = calculate_residuals(sector_models)
     
-    # Save residuals separately
-    io.save_model(residuals, "sector_model_residuals.pkl", settings.METRICS_DIR)
+    # Removed sector_model_residuals.pkl generation - Analysis showed this file is NEVER READ
+    # Residuals are calculated on-the-fly from y_test/y_pred in model PKL files - Date: 2025-01-15
+    # io.save_model(residuals, "sector_model_residuals.pkl", settings.METRICS_DIR)
     
     # Create custom comparison table for sector models
     print("\nCreating model comparison table...")

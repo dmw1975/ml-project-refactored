@@ -182,19 +182,34 @@ def create_model_comparison_plot(
 
 
 def create_metrics_table(
-    models: List[Union[str, Dict[str, Any], ModelData]],
+    models: Optional[List[Union[str, Dict[str, Any], ModelData]]] = None,
     config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None
 ) -> Any:
     """
     Create metrics summary table.
     
     Args:
-        models: List of model names, data dictionaries, or ModelData objects
+        models: List of model names, data dictionaries, or ModelData objects.
+                If None, uses comprehensive loading to get all models.
         config: Visualization configuration
         
     Returns:
         matplotlib.figure.Figure: The created figure
     """
+    # If no models provided, use comprehensive loading
+    if models is None or len(models) == 0:
+        # Set config to use comprehensive loading
+        if config is None:
+            config = {'comprehensive': True}
+        elif isinstance(config, dict):
+            config['comprehensive'] = True
+        else:
+            # It's a VisualizationConfig object
+            config.comprehensive = True
+        
+        # Pass empty list to trigger comprehensive loading
+        return plot_metrics_table([], config)
+    
     # Handle string model names
     model_list = []
     for model in models:

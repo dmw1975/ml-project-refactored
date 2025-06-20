@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional
 import traceback
 import logging
 import time
+import matplotlib.pyplot as plt
 
 from ..config.settings import VISUALIZATION_DIR
 from .utils.io import load_all_models
@@ -38,7 +39,8 @@ from .plots.optimization import (
 
 
 def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
-                                      visualization_dir: Optional[Path] = None) -> Dict[str, List[Path]]:
+                                      visualization_dir: Optional[Path] = None,
+                                      fail_fast: bool = False) -> Dict[str, List[Path]]:
     """
     Create ALL visualization types for all models.
     
@@ -60,6 +62,7 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
     Args:
         models: Optional dictionary of models. If None, loads all models.
         visualization_dir: Optional visualization directory. If None, uses default.
+        fail_fast: If True, stop on first error. If False (default), continue with other visualizations.
         
     Returns:
         Dictionary mapping visualization types to lists of created paths
@@ -92,13 +95,24 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
     step_start = time.time()
     try:
         residual_paths = create_all_residual_plots()
-        all_visualizations['residual_plots'] = residual_paths
+        # Validate paths exist
+        valid_paths = []
+        for path in residual_paths:
+            if isinstance(path, (str, Path)) and Path(path).exists():
+                valid_paths.append(Path(path))
+        
+        all_visualizations['residual_plots'] = valid_paths
         viz_times['residual_plots'] = time.time() - step_start
-        log_viz_step("RESIDUAL", f"Created {len(residual_paths)} residual plots")
+        log_viz_step("RESIDUAL", f"Created {len(valid_paths)} residual plots")
+        
+        if len(valid_paths) < len(residual_paths):
+            log_viz_step("RESIDUAL", f"Warning: {len(residual_paths) - len(valid_paths)} plots failed validation", is_error=True)
+            
     except Exception as e:
         log_viz_step("RESIDUAL", f"Error: {e}", is_error=True)
         logging.exception("Full traceback:")
         traceback.print_exc()
+        all_visualizations['residual_plots'] = []
     
     # 2. Feature Importance Plots
     log_viz_step("FEATURE_IMPORTANCE", "Creating feature importance plots...")
@@ -145,42 +159,138 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
                 'dpi': 300,
                 'format': 'png'
             }
-            cv_figures = plot_cv_distributions(cv_models, cv_config)
+            # Ensure output directory exists
+            cv_config['output_dir'].mkdir(parents=True, exist_ok=True)
+            
+            # Import the function that handles single models
+            from src.visualization.plots.cv_distributions import plot_cv_distribution_single
+            cv_figures = {}
             cv_paths = []
-            for fig_name, fig in cv_figures.items():
-                cv_path = cv_config['output_dir'] / f"{fig_name}.png"
-                cv_paths.append(cv_path)
-            all_visualizations['cv_distributions'] = cv_paths
+            
+            # Count actual files created
+            cv_dir = cv_config['output_dir']
+            before_files = set(cv_dir.glob("*.png"))
+            
+            # Process each model individually
+            for idx, model_data in enumerate(cv_models):
+                try:
+                    # Create subdirectory by model type
+                    model_name = model_data.get('model_name', f'model_{idx}')
+                    model_type = 'unknown'
+                    if 'catboost' in model_name.lower():
+                        model_type = 'catboost'
+                    elif 'lightgbm' in model_name.lower():
+                        model_type = 'lightgbm'
+                    elif 'xgboost' in model_name.lower():
+                        model_type = 'xgboost'
+                    elif 'elasticnet' in model_name.lower():
+                        model_type = 'elasticnet'
+                    elif model_name.lower().startswith('lr_'):
+                        model_type = 'linear'
+                    
+                    # Update config with model-specific directory
+                    model_cv_config = cv_config.copy()
+                    model_cv_config['output_dir'] = cv_config['output_dir'].parent / model_type
+                    model_cv_config['output_dir'].mkdir(parents=True, exist_ok=True)
+                    
+                    fig = plot_cv_distribution_single(model_data, model_cv_config)
+                    if fig:
+                        cv_figures[model_name] = fig
+                        # Figure is saved by plot_cv_distribution_single
+                        plt.close(fig)
+                        log_viz_step("CV_DISTRIBUTIONS", f"Created CV distribution for {model_name}")
+                except Exception as e:
+                    log_viz_step("CV_DISTRIBUTIONS", f"Error with model {model_name}: {e}", is_error=True)
+            
+            # Check for new files created
+            after_files = set(cv_dir.glob("*.png"))
+            new_files = after_files - before_files
+            
+            # Include both tracked paths and newly created files
+            all_cv_files = list(cv_dir.glob("*_cv_distribution.png"))
+            
+            all_visualizations['cv_distributions'] = all_cv_files
             viz_times['cv_distributions'] = time.time() - step_start
-            log_viz_step("CV_DISTRIBUTIONS", f"Created {len(cv_paths)} CV distribution plots")
+            log_viz_step("CV_DISTRIBUTIONS", f"Created {len(all_cv_files)} CV distribution plots")
+            
+            # Validate files exist
+            for cv_file in all_cv_files:
+                if not cv_file.exists():
+                    log_viz_step("CV_DISTRIBUTIONS", f"Warning: Expected file not found: {cv_file}", is_error=True)
         else:
             log_viz_step("CV_DISTRIBUTIONS", "No models with CV data found")
+            all_visualizations['cv_distributions'] = []
             viz_times['cv_distributions'] = time.time() - step_start
     except Exception as e:
         log_viz_step("CV_DISTRIBUTIONS", f"Error: {e}", is_error=True)
         logging.exception("Full traceback:")
         traceback.print_exc()
+        all_visualizations['cv_distributions'] = []
     
     # 4. SHAP Visualizations
     log_viz_step("SHAP", "Creating SHAP visualizations...")
     step_start = time.time()
     try:
-        shap_paths = create_all_shap_visualizations(models, visualization_dir)
-        total_shap = sum(len(paths) for paths in shap_paths.values())
-        all_visualizations['shap'] = shap_paths
-        viz_times['shap'] = time.time() - step_start
-        log_viz_step("SHAP", f"Created {total_shap} SHAP visualizations across {len(shap_paths)} models")
+        # Split models by type for SHAP compatibility
+        shap_compatible_models = {}
+        linear_models = {}
         
-        # Log details about what was created
-        if 'model_comparison' in shap_paths:
-            log_viz_step("SHAP", "✓ Model comparison SHAP plot created")
+        for name, model_data in models.items():
+            if 'Linear_Regression' in name or 'LR_' in name and 'ElasticNet' not in name:
+                linear_models[name] = model_data
+            else:
+                shap_compatible_models[name] = model_data
+        
+        if linear_models:
+            log_viz_step("SHAP", f"Skipping {len(linear_models)} Linear Regression models (SHAP not supported)")
+        
+        # Create SHAP visualizations only for compatible models
+        if shap_compatible_models:
+            shap_paths = create_all_shap_visualizations(shap_compatible_models, visualization_dir)
+            total_shap = sum(len(paths) if isinstance(paths, list) else 1 for paths in shap_paths.values() if paths)
+            all_visualizations['shap'] = shap_paths
+            viz_times['shap'] = time.time() - step_start
+            log_viz_step("SHAP", f"Created {total_shap} SHAP visualizations across {len(shap_paths)} models")
+            
+            # CRITICAL VERIFICATION: Check if CatBoost and LightGBM models got SHAP visualizations
+            shap_dir = visualization_dir / "shap"
+            if shap_dir.exists():
+                # Count directories by model type
+                model_type_counts = {"CatBoost": 0, "LightGBM": 0, "XGBoost": 0, "ElasticNet": 0}
+                for d in shap_dir.iterdir():
+                    if d.is_dir():
+                        for model_type in model_type_counts:
+                            if model_type in d.name:
+                                model_type_counts[model_type] += 1
+                                break
+                
+                # Log verification results
+                for model_type, count in model_type_counts.items():
+                    if count == 0 and any(model_type in name for name in shap_compatible_models.keys()):
+                        log_viz_step("SHAP", f"⚠️ WARNING: No {model_type} SHAP directories created!", is_error=True)
+                    elif count > 0:
+                        log_viz_step("SHAP", f"✓ {model_type}: {count} SHAP directories created")
+                
+                # Check total expected vs actual
+                expected_models = len(shap_compatible_models)
+                actual_dirs = len([d for d in shap_dir.iterdir() if d.is_dir() and not d.name.startswith('.')])
+                if actual_dirs < expected_models:
+                    log_viz_step("SHAP", f"⚠️ WARNING: Expected {expected_models} SHAP dirs but only {actual_dirs} exist", is_error=True)
+            
+            # Note: SHAP model comparison across different model types is complex
+            # and may not be feasible due to different feature spaces and model architectures
+            log_viz_step("SHAP", "ℹ️ SHAP model comparison skipped (technical limitation)")
+                
         else:
-            log_viz_step("SHAP", "⚠ Model comparison SHAP plot NOT created", is_error=True)
+            log_viz_step("SHAP", "No SHAP-compatible models found")
+            all_visualizations['shap'] = {}
+            viz_times['shap'] = time.time() - step_start
             
     except Exception as e:
         log_viz_step("SHAP", f"Error: {e}", is_error=True)
         logging.exception("Full traceback:")
         traceback.print_exc()
+        all_visualizations['shap'] = {}
     
     # 5. Model Comparison Plots
     log_viz_step("MODEL_COMPARISON", "Creating model comparison plots...")
@@ -200,11 +310,19 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
     log_viz_step("METRICS_TABLE", "Creating metrics summary table...")
     step_start = time.time()
     try:
-        model_list = list(models.values())
-        metrics_path = create_metrics_table(model_list)
+        # Use comprehensive loading to ensure all models are included
+        config = {
+            'comprehensive': True,
+            'save': True,
+            'output_dir': visualization_dir / "performance",
+            'dpi': 300,
+            'format': 'png'
+        }
+        # Pass None to trigger comprehensive loading
+        metrics_path = create_metrics_table(None, config)
         all_visualizations['metrics_table'] = [metrics_path] if metrics_path else []
         viz_times['metrics_table'] = time.time() - step_start
-        log_viz_step("METRICS_TABLE", f"Created metrics summary table")
+        log_viz_step("METRICS_TABLE", f"Created comprehensive metrics summary table")
     except Exception as e:
         log_viz_step("METRICS_TABLE", f"Error: {e}", is_error=True)
         logging.exception("Full traceback:")
@@ -316,6 +434,17 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
             # The plots are already saved inside plot_cv_baseline_tests
             baseline_stat_count = len([fig for fig in baseline_plots.values() if fig is not None])
             log_viz_step("STATISTICAL_TESTS", f"Created {baseline_stat_count} baseline significance plots")
+        
+        # Display statistical testing results
+        if results_df is not None and not results_df.empty:
+            log_viz_step("STATISTICAL_TESTS", "Statistical Testing Results Summary:")
+            # Group by baseline type and show summary
+            for baseline_type in results_df['baseline_type'].unique():
+                baseline_results = results_df[results_df['baseline_type'] == baseline_type]
+                significant_count = baseline_results['cv_p_value'].apply(lambda p: p < 0.05).sum()
+                total_models = len(baseline_results)
+                log_viz_step("STATISTICAL_TESTS", 
+                            f"  {baseline_type} baseline: {significant_count}/{total_models} models significantly better (p<0.05)")
             
     except Exception as e:
         log_viz_step("STATISTICAL_TESTS", f"Error: {e}", is_error=True)
@@ -329,15 +458,45 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
         from .plots.baselines import visualize_all_baseline_comparisons, create_metric_baseline_comparison
         
         # Create consolidated plots only - removes duplicate generation
-        baseline_paths = visualize_all_baseline_comparisons()
-        all_visualizations['baseline_comparison'] = baseline_paths if isinstance(baseline_paths, list) else [baseline_paths]
-            
+        baseline_results = visualize_all_baseline_comparisons()
+        
+        # Handle different return types properly
+        baseline_paths = []
+        if isinstance(baseline_results, dict):
+            # Extract paths from dictionary
+            for key, path in baseline_results.items():
+                if path and Path(path).exists():
+                    baseline_paths.append(Path(path))
+        elif isinstance(baseline_results, list):
+            baseline_paths = [Path(p) for p in baseline_results if p and Path(p).exists()]
+        elif baseline_results:
+            # Single path
+            if Path(baseline_results).exists():
+                baseline_paths = [Path(baseline_results)]
+        
+        # Also check for baseline plots in statistical_tests directory
+        stat_test_dir = visualization_dir / "statistical_tests"
+        if stat_test_dir.exists():
+            baseline_stat_files = list(stat_test_dir.glob("baseline_*.png"))
+            baseline_paths.extend(baseline_stat_files)
+        
+        # Remove duplicates
+        baseline_paths = list(set(baseline_paths))
+        
+        all_visualizations['baseline_comparison'] = baseline_paths
         viz_times['baseline_comparison'] = time.time() - step_start
-        log_viz_step("BASELINE_COMPARISON", f"Created baseline comparison plots")
+        log_viz_step("BASELINE_COMPARISON", f"Created {len(baseline_paths)} baseline comparison plots")
+        
+        # Validate files exist
+        for path in baseline_paths:
+            if not path.exists():
+                log_viz_step("BASELINE_COMPARISON", f"Warning: Expected file not found: {path}", is_error=True)
+                
     except Exception as e:
         log_viz_step("BASELINE_COMPARISON", f"Error: {e}", is_error=True)
         logging.exception("Full traceback:")
         traceback.print_exc()
+        all_visualizations['baseline_comparison'] = []
     
     # 11. Sector Weights Plots
     log_viz_step("SECTOR_WEIGHTS", "Creating sector weights plots...")
@@ -436,34 +595,62 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
     logging.info("="*60)
     
     total_plots = 0
+    actual_file_counts = {}
+    
     for viz_type, paths in all_visualizations.items():
         if isinstance(paths, dict):
             # Handle dictionary of paths
             count = 0
-            for p in paths.values():
+            actual_files = []
+            for key, p in paths.items():
                 if isinstance(p, list):
-                    count += len(p)
-                elif p is not None:
+                    # Validate each path exists
+                    for path in p:
+                        if isinstance(path, (str, Path)) and Path(path).exists():
+                            actual_files.append(path)
+                            count += 1
+                elif isinstance(p, (str, Path)) and Path(p).exists():
+                    actual_files.append(p)
                     count += 1
+                elif p is not None and hasattr(p, 'savefig'):
+                    # It's a Figure object - assume it was saved
+                    count += 1
+            actual_file_counts[viz_type] = count
+            
         elif isinstance(paths, list):
             # Handle list of paths or figures
             count = 0
+            actual_files = []
             for p in paths:
-                # Count Figure objects and path strings
-                if p is not None:
-                    if hasattr(p, 'savefig'):  # It's a Figure object
-                        count += 1
-                    elif isinstance(p, (str, Path)):  # It's a file path
-                        count += 1
+                if isinstance(p, (str, Path)) and Path(p).exists():
+                    actual_files.append(p)
+                    count += 1
+                elif p is not None and hasattr(p, 'savefig'):
+                    # It's a Figure object
+                    count += 1
+            actual_file_counts[viz_type] = count
+            
         else:
             # Handle single path or object
-            count = 1 if paths and not hasattr(paths, 'figure') else 0
+            if isinstance(paths, (str, Path)) and Path(paths).exists():
+                count = 1
+            elif paths and hasattr(paths, 'savefig'):
+                count = 1
+            else:
+                count = 0
+            actual_file_counts[viz_type] = count
+            
         total_plots += count
         
         # Get timing if available
         time_str = f" ({viz_times.get(viz_type, 0):.1f}s)" if viz_type in viz_times else ""
         
-        message = f"{viz_type:.<30} {count:>4} plots{time_str}"
+        # Add validation warning if count is 0 but time > 0
+        if count == 0 and viz_times.get(viz_type, 0) > 1.0:
+            message = f"{viz_type:.<30} {count:>4} plots{time_str} ⚠️ (files may not be tracked)"
+        else:
+            message = f"{viz_type:.<30} {count:>4} plots{time_str}"
+            
         print(message)
         logging.info(message)
     
@@ -479,13 +666,29 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
     critical_checks = [
         ('SHAP model comparison', 'model_comparison' in all_visualizations.get('shap', {})),
         ('Baseline comparisons', len(all_visualizations.get('baseline_comparison', [])) > 0),
-        ('Statistical tests', len(all_visualizations.get('baseline_significance', [])) > 0)
+        ('Statistical tests', len(all_visualizations.get('statistical_tests', [])) > 0)
     ]
     
     logging.info("\nCritical plot checks:")
+    print("\nCritical plot checks:")
     for check_name, exists in critical_checks:
         status = "✓" if exists else "✗"
         logging.info(f"  {status} {check_name}")
+        print(f"  {status} {check_name}")
+    
+    # Track and report any visualization types that completely failed
+    failed_types = []
+    for viz_type, paths in all_visualizations.items():
+        if not paths or (isinstance(paths, dict) and not any(paths.values())):
+            if viz_times.get(viz_type, 0) > 0:  # Had time but no output
+                failed_types.append(viz_type)
+    
+    if failed_types:
+        print(f"\n⚠️  Warning: {len(failed_types)} visualization types failed completely:")
+        logging.warning(f"Failed visualization types: {', '.join(failed_types)}")
+        for ft in failed_types:
+            print(f"  - {ft}")
+    
     print("="*60)
     
     return all_visualizations

@@ -224,7 +224,7 @@ def train_enhanced_elasticnet(X, y, dataset_name, test_size=0.2, random_state=42
         'model_name': model_key,
         'X_train': X_train,
         'X_test': X_test,
-        'y_train': y_train,
+        'y_train': y_train,  # Already included - good!
         'y_test': y_test,
         'y_pred': y_pred_optuna,
         'y_train_pred': y_train_pred_optuna,

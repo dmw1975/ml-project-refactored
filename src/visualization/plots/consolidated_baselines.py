@@ -130,7 +130,7 @@ def create_consolidated_baseline_comparison(
     
     # Extract model type for coloring
     def extract_model_type(model_name):
-        if model_name.startswith('XGB'):
+        if model_name.startswith('XGBoost'):
             return 'XGBoost'
         elif model_name.startswith('LightGBM'):
             return 'LightGBM'
@@ -367,7 +367,14 @@ def create_consolidated_baseline_visualizations(
         Dictionary mapping metric names to output paths
     """
     if baseline_data_path is None:
-        baseline_data_path = settings.METRICS_DIR / "baseline_comparison.csv"
+        # Check if adapted CSV exists, otherwise use original
+        adapted_path = settings.METRICS_DIR / "baseline_comparison_adapted.csv"
+        original_path = settings.METRICS_DIR / "baseline_comparison.csv"
+        
+        if adapted_path.exists():
+            baseline_data_path = adapted_path
+        else:
+            baseline_data_path = original_path
     
     if output_dir is None:
         output_dir = settings.VISUALIZATION_DIR / "baselines"

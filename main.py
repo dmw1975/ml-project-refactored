@@ -127,6 +127,8 @@ def parse_args():
                         help='Use one-hot encoded features for tree models (default: native categorical features)')
     parser.add_argument('--non-interactive', action='store_true',
                         help='Run in non-interactive mode (auto-confirm all prompts with default values)')
+    parser.add_argument('--xgboost-feature-removal', action='store_true',
+                        help='Run isolated XGBoost feature removal analysis')
 
     return parser.parse_args()
 
@@ -190,6 +192,17 @@ def main():
         report_existing_studies()
         return
     
+    # Handle XGBoost feature removal analysis
+    if args.xgboost_feature_removal:
+        print("🔬 Running corrected XGBoost feature removal analysis...")
+        print("   - Removes both raw and Yeo-Johnson versions of the feature")
+        print("   - Uses existing Optuna-optimized parameters")
+        print("   - Generates visualizations with main pipeline standards")
+        from xgboost_feature_removal_corrected_v2 import CorrectedXGBoostFeatureRemoval
+        analyzer = CorrectedXGBoostFeatureRemoval()
+        analyzer.run_analysis()
+        return
+    
     # Determine if we should run standard models
     run_standard = not args.sector_only
     
@@ -214,37 +227,62 @@ def main():
             if use_state_manager and state_manager:
                 state_manager.start_stage(PipelineStage.TRAINING)
         
-        # Consolidated confirmation check for all models when using --all
+        # Check models individually to handle missing tree models correctly
         should_retrain_all = True
+        should_retrain_by_type = {}
+        
         if args.all and not args.force_retune:
-            print("\n🔍 Checking for existing trained models across all algorithms...")
+            print("\n🔍 Checking for existing trained models...")
             from src.utils.io import check_all_existing_models, prompt_consolidated_retrain
+            from src.utils.model_check_fix import check_individual_model_training_needed
             
-            all_existing_models = check_all_existing_models(datasets=args.datasets)
-            if all_existing_models:
+            # Check each model type individually
+            model_types = ['linear_regression', 'elasticnet', 'xgboost', 'lightgbm', 'catboost']
+            models_needing_training = []
+            models_already_trained = []
+            
+            for model_type in model_types:
+                needs_training = check_individual_model_training_needed(model_type, args.datasets)
+                should_retrain_by_type[model_type] = needs_training
+                
+                if needs_training:
+                    models_needing_training.append(model_type)
+                else:
+                    models_already_trained.append(model_type)
+            
+            # Report status
+            if models_already_trained:
+                print(f"\n✅ Found existing models for: {', '.join(models_already_trained)}")
+            if models_needing_training:
+                print(f"\n🔨 Need to train: {', '.join(models_needing_training)}")
+            
+            # If all models exist, check if user wants to retrain
+            if not models_needing_training:
+                all_existing_models = check_all_existing_models(datasets=args.datasets)
                 if args.non_interactive:
                     print("\n🤖 Non-interactive mode: Using existing models without retraining")
                     should_retrain_all = False
                 else:
                     should_retrain_all = prompt_consolidated_retrain(all_existing_models)
             else:
-                print("✨ No existing models found - proceeding with full training...")
-                should_retrain_all = True
+                print(f"\n🚀 Proceeding with training for missing models...")
+                # Don't set should_retrain_all to False - we'll check each individually
         
         if args.all or args.train or args.train_linear:
-            if should_retrain_all or not args.all:
+            if should_retrain_all or not args.all or should_retrain_by_type.get('linear_regression', True):
                 print("\nTraining linear regression models...")
                 step_start = time.time()
                 from src.models.linear_regression import train_all_models
                 linear_models = train_all_models()
                 step_times["Linear Regression Training"] = time.time() - step_start
+                print("✓ Linear Regression models training COMPLETE")
             else:
                 print("\n⏭️  Skipping Linear Regression training - using existing models")
                 step_times["Linear Regression Training"] = 0
 
         # Add XGBoost section after the standard model pipeline (FIXED INDENTATION)
         if args.all or args.train_xgboost or args.optimize_xgboost:
-            if should_retrain_all or not args.all or args.force_retune:
+            if should_retrain_all or not args.all or args.force_retune or should_retrain_by_type.get('xgboost', True):
                 print("\nTraining XGBoost models...")
                 step_start = time.time()
                 
@@ -260,6 +298,7 @@ def main():
                     xgboost_models = train_xgboost_categorical_models(datasets=args.datasets)
                 
                 step_times["XGBoost Training"] = time.time() - step_start
+                print("✓ XGBoost models training COMPLETE")
             else:
                 print("\n⏭️  Skipping XGBoost training - using existing models")
                 step_times["XGBoost Training"] = 0
@@ -270,7 +309,7 @@ def main():
             linear_elasticnet_models = train_linear_with_elasticnet_params()
         
         if args.all or args.train:  # Make sure this matches your args
-            if should_retrain_all or not args.all:
+            if should_retrain_all or not args.all or should_retrain_by_type.get('elasticnet', True):
                 print("\nTraining ElasticNet models...")
                 step_start = time.time()
                 from src.models.elastic_net import train_elasticnet_models
@@ -290,6 +329,7 @@ def main():
                     n_trials=n_trials
                 )
                 step_times["ElasticNet Training"] = time.time() - step_start
+                print("✓ ElasticNet models training COMPLETE")
             else:
                 print("\n⏭️  Skipping ElasticNet training - using existing models")
                 step_times["ElasticNet Training"] = 0
@@ -309,388 +349,6 @@ def main():
             print("\nAnalyzing feature importance...")
             from src.evaluation.importance import analyze_feature_importance
             importance_results = analyze_feature_importance()
-            
-        if args.all or args.visualize or args.visualize_new:
-            print("\nGenerating comprehensive visualizations...")
-            step_start = time.time()
-            
-            # Use the comprehensive visualization pipeline
-            try:
-                from src.visualization import run_comprehensive_visualization_pipeline
-                
-                # Run the comprehensive pipeline that includes ALL visualizations
-                visualizations = run_comprehensive_visualization_pipeline()
-                
-                print("\nAll visualizations generated successfully!")
-                step_times["Comprehensive Visualization"] = time.time() - step_start
-                
-            except Exception as e:
-                print(f"Error in comprehensive visualization pipeline: {e}")
-                import traceback
-                traceback.print_exc()
-                step_times["Failed Visualization"] = time.time() - step_start
-                
-                # If comprehensive pipeline fails, try to run individual components
-                print("\nAttempting to run individual visualization components...")
-                import src.visualization as viz
-                from src.visualization.utils.io import load_all_models
-                
-                try:
-                    # Register adapters
-                    from src.visualization.adapters.lightgbm_adapter import LightGBMAdapter
-                    from src.visualization.core.registry import register_adapter
-                    register_adapter('lightgbm', LightGBMAdapter)
-                except:
-                    pass
-                
-                # Load all models once
-                models = load_all_models()
-                model_list = list(models.values())
-                
-                # Create all visualizations
-                try:
-                    print("Creating residual plots...")
-                    viz.create_all_residual_plots()
-                except Exception as e:
-                    print(f"Error creating residual plots: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                try:
-                    print("Creating model comparison visualizations...")
-                    viz.create_model_comparison_plot(model_list)
-                except Exception as e:
-                    print(f"Error creating model comparison: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                try:
-                    print("Creating metrics summary table...")
-                    viz.create_metrics_table(model_list)
-                except Exception as e:
-                    print(f"Error creating metrics table: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                try:
-                    print("Creating feature importance visualizations...")
-                    for model in model_list:
-                        viz.create_feature_importance_plot(model)
-                except Exception as e:
-                    print(f"Error creating feature importance plots: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                try:
-                    print("Creating statistical test visualizations...")
-                    # First try to create a comparative dashboard
-                    viz.create_comparative_dashboard(model_list)
-                    
-                    # Then create statistical test visualizations
-                    # Get the explicit path to the model comparison tests file
-                    tests_file = settings.METRICS_DIR / "model_comparison_tests.csv"
-                    
-                    # Check if file exists before attempting to visualize
-                    if tests_file.exists():
-                        # Set up output directory
-                        output_dir = settings.VISUALIZATION_DIR / "statistical_tests"
-                        output_dir.mkdir(parents=True, exist_ok=True)
-                        
-                        # Create config with explicit output directory
-                        from src.visualization.core.interfaces import VisualizationConfig
-                        config = VisualizationConfig(
-                            output_dir=output_dir,
-                            format="png",
-                            dpi=300,
-                            save=True,
-                            show=False
-                        )
-                        
-                        # Call with explicit parameters
-                        viz.visualize_statistical_tests(tests_file=tests_file, config=config)
-                        print(f"Statistical test visualizations saved to {output_dir}")
-                    else:
-                        print(f"Statistical tests file not found: {tests_file}")
-                except Exception as e:
-                    print(f"Error creating statistical visualizations: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                # ElasticNet specific visualization
-                try:
-                    print("Creating ElasticNet visualizations...")
-                    elasticnet_models = {name: model for name, model in models.items() 
-                                      if 'elasticnet' in name.lower()}
-                    
-                    if elasticnet_models:
-                        # Import necessary modules for ElasticNet visualization
-                        from src.visualization.viz_factory import (
-                            visualize_model, create_hyperparameter_comparison,
-                            create_basic_vs_optuna_comparison, create_optuna_improvement_plot
-                        )
-                        from src.visualization.adapters.elasticnet_adapter import ElasticNetAdapter
-                        from src.visualization.core.registry import register_adapter
-                        from src.visualization.plots.features import plot_feature_importance_comparison
-                        from pathlib import Path
-                        import os
-                        
-                        # Register ElasticNet adapter if not already registered
-                        register_adapter('elasticnet', ElasticNetAdapter)
-                        
-                        # Visualize each model
-                        for name, model in elasticnet_models.items():
-                            print(f"Creating visualizations for {name}...")
-                            adapter = ElasticNetAdapter(model)
-                            output_paths = visualize_model(adapter)
-                            print(f"Visualizations for {name}:")
-                            for plot_type, path in output_paths.items():
-                                print(f"  - {plot_type}: {path}")
-                        
-                        # Create comparison visualizations
-                        print("Generating ElasticNet comparison visualizations...")
-                        adapters = [ElasticNetAdapter(model) for model in elasticnet_models.values()]
-                        model_data_list = list(elasticnet_models.values())
-                        
-                        # Set up output directory for performance plots
-                        perf_dir = settings.VISUALIZATION_DIR / "performance" / "elasticnet"
-                        os.makedirs(perf_dir, exist_ok=True)
-                        
-                        # Set up output directory for feature plots
-                        features_dir = settings.VISUALIZATION_DIR / "features" / "elasticnet"
-                        os.makedirs(features_dir, exist_ok=True)
-                        
-                        # Configuration for performance visualizations
-                        from src.visualization.core.interfaces import VisualizationConfig
-                        perf_config = VisualizationConfig(
-                            output_dir=perf_dir,
-                            format="png",
-                            dpi=300,
-                            save=True,
-                            show=False
-                        )
-                        
-                        # Feature importance configuration
-                        feature_config = VisualizationConfig(
-                            output_dir=features_dir,
-                            format="png", 
-                            dpi=300,
-                            save=True,
-                            show=False
-                        )
-                        
-                        # Create feature importance comparisons
-                        plot_feature_importance_comparison(adapters, feature_config)
-                        
-                        # Generate Optuna visualizations if available
-                        optuna_models = {name: model for name, model in elasticnet_models.items() 
-                                       if 'optuna' in name and 'study' in model}
-                        
-                        if optuna_models:
-                            print("Generating ElasticNet Optuna visualizations...")
-                            from src.visualization.plots.optimization import (
-                                plot_optimization_history, plot_param_importance, plot_contour
-                            )
-                            
-                            for model_name, model_data in optuna_models.items():
-                                study = model_data.get('study')
-                                if study:
-                                    print(f"  Creating Optuna plots for {model_name}...")
-                                    
-                                    # Optimization history
-                                    hist_path = plot_optimization_history(study, perf_config, model_name)
-                                    if hist_path:
-                                        print(f"    ✓ Optimization history: {Path(hist_path).name}")
-                                    
-                                    # Parameter importance
-                                    param_path = plot_param_importance(study, perf_config, model_name)
-                                    if param_path:
-                                        print(f"    ✓ Parameter importance: {Path(param_path).name}")
-                                    
-                                    # Contour plot
-                                    contour_path = plot_contour(study, perf_config, model_name)
-                                    if contour_path:
-                                        print(f"    ✓ Contour plot: {Path(contour_path).name}")
-                        
-                        # Create hyperparameter comparisons (one for each important parameter for ElasticNet)
-                        for param in ['alpha', 'l1_ratio']:
-                            try:
-                                output_path = create_hyperparameter_comparison(
-                                    model_data_list, param, perf_config, "elasticnet"
-                                )
-                                if output_path:
-                                    print(f"  - {param} comparison: {output_path}")
-                            except Exception as e:
-                                print(f"Error creating {param} comparison: {e}")
-                        
-                        # Create basic vs optuna comparison if applicable
-                        try:
-                            output_path = create_basic_vs_optuna_comparison(
-                                model_data_list, perf_config, "elasticnet"
-                            )
-                            if output_path:
-                                print(f"  - Basic vs Optuna comparison: {output_path}")
-                        except Exception as e:
-                            print(f"Error creating basic vs optuna comparison: {e}")
-                        
-                        # Create optuna improvement plot if applicable
-                        try:
-                            output_path = create_optuna_improvement_plot(
-                                model_data_list, perf_config, "elasticnet"
-                            )
-                            if output_path:
-                                print(f"  - Optuna improvement: {output_path}")
-                        except Exception as e:
-                            print(f"Error creating optuna improvement plot: {e}")
-                        
-                        print(f"ElasticNet visualizations completed successfully using new architecture.")
-                    else:
-                        print("No ElasticNet models found.")
-                except Exception as e:
-                    print(f"Error creating ElasticNet visualizations: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                # LightGBM specific visualization
-                try:
-                    print("Creating LightGBM visualizations...")
-                    lightgbm_models = {name: model for name, model in models.items() 
-                                     if 'lightgbm' in name.lower()}
-                    
-                    if lightgbm_models:
-                        from src.visualization.viz_factory import visualize_model
-                        from src.visualization.adapters.lightgbm_adapter import LightGBMAdapter
-                        from src.visualization.plots.features import plot_feature_importance_comparison
-                        import os
-                        
-                        # Visualize each LightGBM model
-                        for name, model_data in lightgbm_models.items():
-                            print(f"Creating visualizations for {name}...")
-                            adapter = LightGBMAdapter(model_data)
-                            output_paths = visualize_model(adapter)
-                            
-                            # Check if feature importance was created
-                            if 'feature_importance' in output_paths:
-                                print(f"Feature importance saved to {output_paths['feature_importance']}")
-                        
-                        # Create comparison visualization for LightGBM models
-                        adapters = [LightGBMAdapter(model_data) for model_data in lightgbm_models.values()]
-                        performance_dir = settings.VISUALIZATION_DIR / "performance" / "lightgbm"
-                        os.makedirs(performance_dir, exist_ok=True)
-                        
-                        # Create feature importance comparison
-                        features_dir = settings.VISUALIZATION_DIR / "features" / "lightgbm"
-                        os.makedirs(features_dir, exist_ok=True)
-                        
-                        # Create config for feature importance comparison
-                        from src.visualization.core.interfaces import VisualizationConfig
-                        importance_config = VisualizationConfig(
-                            output_dir=features_dir,
-                            format="png",
-                            dpi=300,
-                            save=True,
-                            show=False,
-                            create_heatmap=False  # Explicitly disable heatmap for LightGBM
-                        )
-                        
-                        # Generate feature importance comparison
-                        plot_feature_importance_comparison(adapters, importance_config)
-                        print(f"LightGBM feature importance comparison saved to {features_dir}")
-                    else:
-                        print("No LightGBM models found.")
-                except Exception as e:
-                    print(f"Error creating LightGBM visualizations: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                # Dataset comparison visualizations
-                try:
-                    print("Creating dataset comparison visualizations...")
-                    viz.plots.dataset_comparison.create_all_dataset_comparisons()
-                except Exception as e:
-                    print(f"Error creating dataset comparisons: {e}")
-                    import traceback
-                    traceback.print_exc()
-                
-                # Create cross-model feature importance comparisons by dataset
-                try:
-                    print("\nCreating cross-model feature importance comparisons by dataset...")
-                    from src.visualization.viz_factory import create_cross_model_feature_importance_by_dataset
-                    
-                    dataset_paths = create_cross_model_feature_importance_by_dataset(
-                        format='png',
-                        dpi=300,
-                        show=False
-                    )
-                    
-                    if dataset_paths:
-                        print("Cross-model feature importance comparisons created successfully.")
-                    else:
-                        print("No cross-model feature importance comparisons were created.")
-                except Exception as e:
-                    print(f"Error creating cross-model feature importance comparisons: {e}")
-                
-                # Add baseline comparison visualizations
-                try:
-                    print("\nCreating baseline comparison visualizations...")
-                    from src.visualization.plots.baselines import visualize_all_baseline_comparisons, create_metric_baseline_comparison
-                    from pathlib import Path
-                    
-                    # Create consolidated plots
-                    baseline_figures = visualize_all_baseline_comparisons(create_individual_plots=False)
-                    if baseline_figures:
-                        print("Baseline comparison visualizations created successfully.")
-                    
-                    # Also create individual metric baseline comparison plots
-                    baseline_data_path = settings.METRICS_DIR / "baseline_comparison.csv"
-                    if baseline_data_path.exists():
-                        output_dir = settings.VISUALIZATION_DIR / "baselines"
-                        output_dir.mkdir(parents=True, exist_ok=True)
-                        
-                        # Create plots for each metric and baseline type
-                        metrics = ['RMSE', 'MAE', 'R²']
-                        baseline_types = ['Random', 'Mean', 'Median']
-                        
-                        for metric in metrics:
-                            # Create plot for Random baseline with original filename for backward compatibility
-                            try:
-                                output_path = output_dir / f"baseline_comparison_{metric}.png"
-                                create_metric_baseline_comparison(
-                                    baseline_data_path=str(baseline_data_path),
-                                    output_path=str(output_path),
-                                    metric=metric,
-                                    baseline_type='Random'
-                                )
-                                print(f"  Created baseline comparison plot for {metric}")
-                            except Exception as e:
-                                print(f"  Error creating baseline comparison for {metric}: {e}")
-                            
-                            # Create plots for all baseline types with type in filename
-                            for baseline_type in baseline_types:
-                                try:
-                                    output_path = output_dir / f"baseline_comparison_{metric}_{baseline_type.lower()}.png"
-                                    create_metric_baseline_comparison(
-                                        baseline_data_path=str(baseline_data_path),
-                                        output_path=str(output_path),
-                                        metric=metric,
-                                        baseline_type=baseline_type
-                                    )
-                                    print(f"  Created {baseline_type} baseline comparison plot for {metric}")
-                                except Exception as e:
-                                    print(f"  Error creating {baseline_type} baseline comparison for {metric}: {e}")
-                    else:
-                        print("No baseline comparison data found - run baseline evaluation first")
-                        
-                except Exception as e:
-                    print(f"Error creating baseline comparison visualizations: {e}")
-                
-                print("Visualization completed successfully.")
-                step_times["New Visualization"] = time.time() - step_start
-            except Exception as e:
-                print(f"Error in visualization pipeline: {e}")
-                import traceback
-                traceback.print_exc()
-                step_times["Failed New Visualization"] = time.time() - step_start
-                print("\nVisualization failed. Please check the error messages above.")
             
         if args.all or args.visualize_new:
             print("\nGenerating visualizations using new architecture...")
@@ -939,7 +597,7 @@ def main():
                     print("XGBoost visualization failed. Please check the error messages above.")
             
         if args.all or args.train_lightgbm or args.optimize_lightgbm:
-            if should_retrain_all or not args.all or args.force_retune:
+            if should_retrain_all or not args.all or args.force_retune or should_retrain_by_type.get('lightgbm', True):
                 print("\nTraining LightGBM models...")
                 step_start = time.time()
                 
@@ -955,6 +613,7 @@ def main():
                     lightgbm_models = train_lightgbm_categorical_models(datasets=args.datasets)
                 
                 step_times["LightGBM Training"] = time.time() - step_start
+                print("✓ LightGBM models training COMPLETE")
             else:
                 print("\n⏭️  Skipping LightGBM training - using existing models")
                 step_times["LightGBM Training"] = 0
@@ -1079,29 +738,8 @@ def main():
                     print("Falling back to deprecated visualization...")
                     visualize_lightgbm_models()
             
-        if args.all or args.train_lightgbm or args.optimize_lightgbm:
-            if should_retrain_all or not args.all or args.force_retune:
-                print("\nTraining LightGBM models...")
-                step_start = time.time()
-                
-                if args.use_one_hot:
-                    print("  🔢 Using one-hot encoded LightGBM implementation (legacy mode)")
-                    from src.models.lightgbm_categorical import train_lightgbm_models
-                    # Determine number of trials
-                    n_trials = args.optimize_lightgbm if args.optimize_lightgbm else settings.LIGHTGBM_PARAMS.get('n_trials', 50)
-                    lightgbm_models = train_lightgbm_models(datasets=args.datasets, n_trials=n_trials, force_retune=args.force_retune)
-                else:
-                    print("  🌳 Using native categorical LightGBM implementation (default)")
-                    from src.models.lightgbm_categorical import train_lightgbm_categorical_models
-                    lightgbm_models = train_lightgbm_categorical_models(datasets=args.datasets)
-                
-                step_times["LightGBM Training"] = time.time() - step_start
-            else:
-                print("\n⏭️  Skipping LightGBM training - using existing models")
-                step_times["LightGBM Training"] = 0
-            
         if args.all or args.train_catboost or args.optimize_catboost:
-            if should_retrain_all or not args.all or args.force_retune:
+            if should_retrain_all or not args.all or args.force_retune or should_retrain_by_type.get('catboost', True):
                 print("\nTraining CatBoost models...")
                 step_start = time.time()
                 
@@ -1117,6 +755,7 @@ def main():
                     catboost_models = train_catboost_categorical_models(datasets=args.datasets)
                 
                 step_times["CatBoost Training"] = time.time() - step_start
+                print("✓ CatBoost models training COMPLETE")
             else:
                 print("\n⏭️  Skipping CatBoost training - using existing models")
                 step_times["CatBoost Training"] = 0
@@ -1298,32 +937,43 @@ def main():
     if args.visualize_sector_lightgbm or args.all:
         print("\nGenerating sector-specific LightGBM visualizations...")
         
-        # Use the new visualization architecture for LightGBM sectors
+        # Check if LightGBM sector models exist
+        lightgbm_metrics_file = settings.METRICS_DIR / "sector_lightgbm_metrics.csv"
+        if lightgbm_metrics_file.exists():
+            try:
+                # Use the dedicated LightGBM sector visualization script
+                from create_lightgbm_sector_visualizations import main as create_lightgbm_visualizations
+                create_lightgbm_visualizations()
+                print("LightGBM sector visualizations completed.")
+            except Exception as e:
+                print(f"Error generating LightGBM sector visualizations: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("No LightGBM sector metrics found. Please train models first with --train-sector-lightgbm")
+    
+    # ElasticNet Sector model pipeline (including when --all is used)
+    if args.all:
+        print("\nTraining sector-specific ElasticNet models...")
         try:
-            from src.visualization.plots.sectors import visualize_lightgbm_sector_plots
+            from src.models.sector_elastic_net_models import run_sector_elastic_net_models
+            sector_elasticnet_models = run_sector_elastic_net_models()
+            print("ElasticNet sector models training completed.")
             
-            # Check if LightGBM sector models exist
-            lightgbm_metrics_file = settings.METRICS_DIR / "sector_lightgbm_metrics.csv"
-            if lightgbm_metrics_file.exists():
-                # Generate LightGBM sector visualizations
-                lightgbm_figures = visualize_lightgbm_sector_plots()
-                
-                if lightgbm_figures:
-                    print(f"Generated {len(lightgbm_figures)} LightGBM sector visualization plots")
-                    print(f"Plots saved to: {settings.VISUALIZATION_DIR / 'sectors' / 'lightgbm'}")
-                else:
-                    print("No LightGBM sector visualizations were generated")
-            else:
-                print("No LightGBM sector metrics found. Please train models first with --train-sector-lightgbm")
+            # Generate ElasticNet sector visualizations
+            print("\nGenerating ElasticNet sector visualizations...")
+            from create_elasticnet_sector_visualizations import main as create_elasticnet_visualizations
+            create_elasticnet_visualizations()
+            print("ElasticNet sector visualizations completed.")
         except Exception as e:
-            print(f"Error generating LightGBM sector visualizations: {e}")
+            print(f"Error training ElasticNet sector models: {e}")
             import traceback
             traceback.print_exc()
     
     # Run additional visualizations when using --all flag
     if args.all:
         step_start = time.time()
-        run_additional_visualizations(use_state_manager, state_manager)
+        run_additional_visualizations(args, step_times, use_state_manager, state_manager)
         step_times["Additional Visualizations"] = time.time() - step_start
     
     # Calculate and display execution time
@@ -1359,8 +1009,9 @@ def main():
         
         print(f"\nTotal runtime: {hours} hours, {minutes} minutes, {seconds} seconds")
 
-def run_additional_visualizations(use_state_manager=False, state_manager=None):
+def run_additional_visualizations(args, step_times, use_state_manager=False, state_manager=None):
     """Run additional visualizations not covered in the standard visualization modules."""
+    step_start = time.time()  # Track timing for this function
     try:
         # Add cross-validation plots
         print("\nGenerating cross-validation plots...")
@@ -1505,9 +1156,398 @@ def run_additional_visualizations(use_state_manager=False, state_manager=None):
             print(f"Error generating baseline comparison visualizations: {e}")
         
         print("\nAdditional visualizations complete.")
+        step_times["Additional Visualizations (Success)"] = time.time() - step_start
     except Exception as e:
         print(f"Error generating additional visualizations: {e}")
+        step_times["Additional Visualizations (Failed)"] = time.time() - step_start
     
+
+    # ==========================================
+    # MOVED: Comprehensive visualization pipeline
+    # This was moved from line 350 to ensure all models are trained first
+    # ==========================================
+    if args.all or args.visualize or args.visualize_new:
+        print("\nGenerating comprehensive visualizations...")
+        step_start = time.time()
+            
+        # Use the comprehensive visualization pipeline
+        try:
+            from src.visualization import run_comprehensive_visualization_pipeline
+                
+            # Run the comprehensive pipeline that includes ALL visualizations
+            visualizations = run_comprehensive_visualization_pipeline()
+                
+            # Don't claim complete success - the pipeline reports its own status
+            step_times["Comprehensive Visualization"] = time.time() - step_start
+                
+        except Exception as e:
+            print(f"Error in comprehensive visualization pipeline: {e}")
+            import traceback
+            traceback.print_exc()
+            step_times["Failed Visualization"] = time.time() - step_start
+                
+            # If comprehensive pipeline fails, try to run individual components
+            print("\nAttempting to run individual visualization components...")
+            import src.visualization as viz
+            from src.visualization.utils.io import load_all_models
+                
+            try:
+                # Register adapters
+                from src.visualization.adapters.lightgbm_adapter import LightGBMAdapter
+                from src.visualization.core.registry import register_adapter
+                register_adapter('lightgbm', LightGBMAdapter)
+            except:
+                pass
+                
+            # Load all models once
+            models = load_all_models()
+            model_list = list(models.values())
+                
+            # Create all visualizations
+            try:
+                print("Creating residual plots...")
+                viz.create_all_residual_plots()
+            except Exception as e:
+                print(f"Error creating residual plots: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            try:
+                print("Creating model comparison visualizations...")
+                viz.create_model_comparison_plot(model_list)
+            except Exception as e:
+                print(f"Error creating model comparison: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            try:
+                print("Creating metrics summary table...")
+                viz.create_metrics_table(model_list)
+            except Exception as e:
+                print(f"Error creating metrics table: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            try:
+                print("Creating feature importance visualizations...")
+                for model in model_list:
+                    viz.create_feature_importance_plot(model)
+            except Exception as e:
+                print(f"Error creating feature importance plots: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            try:
+                print("Creating statistical test visualizations...")
+                # First try to create a comparative dashboard
+                viz.create_comparative_dashboard(model_list)
+                    
+                # Then create statistical test visualizations
+                # Get the explicit path to the model comparison tests file
+                tests_file = settings.METRICS_DIR / "model_comparison_tests.csv"
+                    
+                # Check if file exists before attempting to visualize
+                if tests_file.exists():
+                    # Set up output directory
+                    output_dir = settings.VISUALIZATION_DIR / "statistical_tests"
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                        
+                    # Create config with explicit output directory
+                    from src.visualization.core.interfaces import VisualizationConfig
+                    config = VisualizationConfig(
+                        output_dir=output_dir,
+                        format="png",
+                        dpi=300,
+                        save=True,
+                        show=False
+                    )
+                        
+                    # Call with explicit parameters
+                    viz.visualize_statistical_tests(tests_file=tests_file, config=config)
+                    print(f"Statistical test visualizations saved to {output_dir}")
+                else:
+                    print(f"Statistical tests file not found: {tests_file}")
+            except Exception as e:
+                print(f"Error creating statistical visualizations: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            # ElasticNet specific visualization
+            try:
+                print("Creating ElasticNet visualizations...")
+                elasticnet_models = {name: model for name, model in models.items() 
+                                  if 'elasticnet' in name.lower()}
+                    
+                if elasticnet_models:
+                    # Import necessary modules for ElasticNet visualization
+                    from src.visualization.viz_factory import (
+                        visualize_model, create_hyperparameter_comparison,
+                        create_basic_vs_optuna_comparison, create_optuna_improvement_plot
+                    )
+                    from src.visualization.adapters.elasticnet_adapter import ElasticNetAdapter
+                    from src.visualization.core.registry import register_adapter
+                    from src.visualization.plots.features import plot_feature_importance_comparison
+                    from pathlib import Path
+                    import os
+                        
+                    # Register ElasticNet adapter if not already registered
+                    register_adapter('elasticnet', ElasticNetAdapter)
+                        
+                    # Visualize each model
+                    for name, model in elasticnet_models.items():
+                        print(f"Creating visualizations for {name}...")
+                        adapter = ElasticNetAdapter(model)
+                        output_paths = visualize_model(adapter)
+                        print(f"Visualizations for {name}:")
+                        for plot_type, path in output_paths.items():
+                            print(f"  - {plot_type}: {path}")
+                        
+                    # Create comparison visualizations
+                    print("Generating ElasticNet comparison visualizations...")
+                    adapters = [ElasticNetAdapter(model) for model in elasticnet_models.values()]
+                    model_data_list = list(elasticnet_models.values())
+                        
+                    # Set up output directory for performance plots
+                    perf_dir = settings.VISUALIZATION_DIR / "performance" / "elasticnet"
+                    os.makedirs(perf_dir, exist_ok=True)
+                        
+                    # Set up output directory for feature plots
+                    features_dir = settings.VISUALIZATION_DIR / "features" / "elasticnet"
+                    os.makedirs(features_dir, exist_ok=True)
+                        
+                    # Configuration for performance visualizations
+                    from src.visualization.core.interfaces import VisualizationConfig
+                    perf_config = VisualizationConfig(
+                        output_dir=perf_dir,
+                        format="png",
+                        dpi=300,
+                        save=True,
+                        show=False
+                    )
+                        
+                    # Feature importance configuration
+                    feature_config = VisualizationConfig(
+                        output_dir=features_dir,
+                        format="png", 
+                        dpi=300,
+                        save=True,
+                        show=False
+                    )
+                        
+                    # Create feature importance comparisons
+                    plot_feature_importance_comparison(adapters, feature_config)
+                        
+                    # Generate Optuna visualizations if available
+                    optuna_models = {name: model for name, model in elasticnet_models.items() 
+                                   if 'optuna' in name and 'study' in model}
+                        
+                    if optuna_models:
+                        print("Generating ElasticNet Optuna visualizations...")
+                        from src.visualization.plots.optimization import (
+                            plot_optimization_history, plot_param_importance, plot_contour
+                        )
+                            
+                        for model_name, model_data in optuna_models.items():
+                            study = model_data.get('study')
+                            if study:
+                                print(f"  Creating Optuna plots for {model_name}...")
+                                    
+                                # Optimization history
+                                hist_path = plot_optimization_history(study, perf_config, model_name)
+                                if hist_path:
+                                    print(f"    ✓ Optimization history: {Path(hist_path).name}")
+                                    
+                                # Parameter importance
+                                param_path = plot_param_importance(study, perf_config, model_name)
+                                if param_path:
+                                    print(f"    ✓ Parameter importance: {Path(param_path).name}")
+                                    
+                                # Contour plot
+                                contour_path = plot_contour(study, perf_config, model_name)
+                                if contour_path:
+                                    print(f"    ✓ Contour plot: {Path(contour_path).name}")
+                        
+                    # Create hyperparameter comparisons (one for each important parameter for ElasticNet)
+                    for param in ['alpha', 'l1_ratio']:
+                        try:
+                            output_path = create_hyperparameter_comparison(
+                                model_data_list, param, perf_config, "elasticnet"
+                            )
+                            if output_path:
+                                print(f"  - {param} comparison: {output_path}")
+                        except Exception as e:
+                            print(f"Error creating {param} comparison: {e}")
+                        
+                    # Create basic vs optuna comparison if applicable
+                    try:
+                        output_path = create_basic_vs_optuna_comparison(
+                            model_data_list, perf_config, "elasticnet"
+                        )
+                        if output_path:
+                            print(f"  - Basic vs Optuna comparison: {output_path}")
+                    except Exception as e:
+                        print(f"Error creating basic vs optuna comparison: {e}")
+                        
+                    # Create optuna improvement plot if applicable
+                    try:
+                        output_path = create_optuna_improvement_plot(
+                            model_data_list, perf_config, "elasticnet"
+                        )
+                        if output_path:
+                            print(f"  - Optuna improvement: {output_path}")
+                    except Exception as e:
+                        print(f"Error creating optuna improvement plot: {e}")
+                        
+                    print(f"ElasticNet visualizations completed successfully using new architecture.")
+                else:
+                    print("No ElasticNet models found.")
+            except Exception as e:
+                print(f"Error creating ElasticNet visualizations: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            # LightGBM specific visualization
+            try:
+                print("Creating LightGBM visualizations...")
+                lightgbm_models = {name: model for name, model in models.items() 
+                                 if 'lightgbm' in name.lower()}
+                    
+                if lightgbm_models:
+                    from src.visualization.viz_factory import visualize_model
+                    from src.visualization.adapters.lightgbm_adapter import LightGBMAdapter
+                    from src.visualization.plots.features import plot_feature_importance_comparison
+                    import os
+                        
+                    # Visualize each LightGBM model
+                    for name, model_data in lightgbm_models.items():
+                        print(f"Creating visualizations for {name}...")
+                        adapter = LightGBMAdapter(model_data)
+                        output_paths = visualize_model(adapter)
+                            
+                        # Check if feature importance was created
+                        if 'feature_importance' in output_paths:
+                            print(f"Feature importance saved to {output_paths['feature_importance']}")
+                        
+                    # Create comparison visualization for LightGBM models
+                    adapters = [LightGBMAdapter(model_data) for model_data in lightgbm_models.values()]
+                    performance_dir = settings.VISUALIZATION_DIR / "performance" / "lightgbm"
+                    os.makedirs(performance_dir, exist_ok=True)
+                        
+                    # Create feature importance comparison
+                    features_dir = settings.VISUALIZATION_DIR / "features" / "lightgbm"
+                    os.makedirs(features_dir, exist_ok=True)
+                        
+                    # Create config for feature importance comparison
+                    from src.visualization.core.interfaces import VisualizationConfig
+                    importance_config = VisualizationConfig(
+                        output_dir=features_dir,
+                        format="png",
+                        dpi=300,
+                        save=True,
+                        show=False,
+                        create_heatmap=False  # Explicitly disable heatmap for LightGBM
+                    )
+                        
+                    # Generate feature importance comparison
+                    plot_feature_importance_comparison(adapters, importance_config)
+                    print(f"LightGBM feature importance comparison saved to {features_dir}")
+                else:
+                    print("No LightGBM models found.")
+            except Exception as e:
+                print(f"Error creating LightGBM visualizations: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            # Dataset comparison visualizations
+            try:
+                print("Creating dataset comparison visualizations...")
+                viz.plots.dataset_comparison.create_all_dataset_comparisons()
+            except Exception as e:
+                print(f"Error creating dataset comparisons: {e}")
+                import traceback
+                traceback.print_exc()
+                
+            # Create cross-model feature importance comparisons by dataset
+            try:
+                print("\nCreating cross-model feature importance comparisons by dataset...")
+                from src.visualization.viz_factory import create_cross_model_feature_importance_by_dataset
+                    
+                dataset_paths = create_cross_model_feature_importance_by_dataset(
+                    format='png',
+                    dpi=300,
+                    show=False
+                )
+                    
+                if dataset_paths:
+                    print("Cross-model feature importance comparisons created successfully.")
+                else:
+                    print("No cross-model feature importance comparisons were created.")
+            except Exception as e:
+                print(f"Error creating cross-model feature importance comparisons: {e}")
+                
+            # Add baseline comparison visualizations
+            try:
+                print("\nCreating baseline comparison visualizations...")
+                from src.visualization.plots.baselines import visualize_all_baseline_comparisons, create_metric_baseline_comparison
+                from pathlib import Path
+                    
+                # Create consolidated plots
+                baseline_figures = visualize_all_baseline_comparisons(create_individual_plots=False)
+                if baseline_figures:
+                    print("Baseline comparison visualizations created successfully.")
+                    
+                # Also create individual metric baseline comparison plots
+                baseline_data_path = settings.METRICS_DIR / "baseline_comparison.csv"
+                if baseline_data_path.exists():
+                    output_dir = settings.VISUALIZATION_DIR / "baselines"
+                        
+                    # Create plots for each metric and baseline type
+                    metrics = ['RMSE', 'MAE', 'R²']
+                    baseline_types = ['Random', 'Mean', 'Median']
+                        
+                    for metric in metrics:
+                        # Create plot for Random baseline with original filename for backward compatibility
+                        try:
+                            output_path = output_dir / f"baseline_comparison_{metric}.png"
+                            create_metric_baseline_comparison(
+                                baseline_data_path=str(baseline_data_path),
+                                output_path=str(output_path),
+                                metric=metric,
+                                baseline_type='Random'
+                            )
+                            print(f"  Created baseline comparison plot for {metric}")
+                        except Exception as e:
+                            print(f"  Error creating baseline comparison for {metric}: {e}")
+                            
+                        # Create plots for all baseline types with type in filename
+                        for baseline_type in baseline_types:
+                            try:
+                                output_path = output_dir / f"baseline_comparison_{metric}_{baseline_type.lower()}.png"
+                                create_metric_baseline_comparison(
+                                    baseline_data_path=str(baseline_data_path),
+                                    output_path=str(output_path),
+                                    metric=metric,
+                                    baseline_type=baseline_type
+                                )
+                                print(f"  Created {baseline_type} baseline comparison plot for {metric}")
+                            except Exception as e:
+                                print(f"  Error creating {baseline_type} baseline comparison for {metric}: {e}")
+                else:
+                    print("No baseline comparison data found - run baseline evaluation first")
+                        
+            except Exception as e:
+                print(f"Error creating baseline comparison visualizations: {e}")
+                
+            print("Visualization completed successfully.")
+            step_times["New Visualization"] = time.time() - step_start
+        except Exception as e:
+            print(f"Error in visualization pipeline: {e}")
+            import traceback
+            traceback.print_exc()
+            step_times["Failed New Visualization"] = time.time() - step_start
+            print("\nVisualization failed. Please check the error messages above.")
+            
+
     # Complete pipeline and print summary if using state manager
     if use_state_manager and state_manager:
         try:

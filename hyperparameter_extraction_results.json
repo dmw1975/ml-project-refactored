@@ -1,0 +1,225 @@
+{
+  "XGBoost Enhanced": {
+    "optuna": {
+      "max_depth": {
+        "type": "int",
+        "min": 3,
+        "max": 10,
+        "log": false
+      },
+      "n_estimators": {
+        "type": "int",
+        "min": 50,
+        "max": 500,
+        "log": false
+      },
+      "min_child_weight": {
+        "type": "int",
+        "min": 1,
+        "max": 10,
+        "log": false
+      },
+      "learning_rate": {
+        "type": "float",
+        "min": 0.01,
+        "max": 0.3,
+        "log": true
+      },
+      "subsample": {
+        "type": "float",
+        "min": 0.5,
+        "max": 1.0,
+        "log": false
+      },
+      "colsample_bytree": {
+        "type": "float",
+        "min": 0.5,
+        "max": 1.0,
+        "log": false
+      },
+      "gamma": {
+        "type": "float",
+        "min": 1e-08,
+        "max": 1.0,
+        "log": true
+      },
+      "alpha": {
+        "type": "float",
+        "min": 1e-08,
+        "max": 1.0,
+        "log": true
+      },
+      "lambda": {
+        "type": "float",
+        "min": 1e-08,
+        "max": 1.0,
+        "log": true
+      }
+    },
+    "basic": {
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "n_estimators": 100,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8
+    },
+    "file": "scripts/archive/enhanced_xgboost_categorical.py"
+  },
+  "XGBoost Feature Removal Basic": {
+    "optuna": {},
+    "basic": {
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "n_estimators": 100
+    },
+    "file": "xgboost_feature_removal_basic.py"
+  },
+  "XGBoost Feature Removal Enhanced": {
+    "optuna": {},
+    "basic": {
+      "max_depth": 6,
+      "learning_rate": 0.1,
+      "n_estimators": 100
+    },
+    "file": "xgboost_feature_removal_enhanced.py"
+  },
+  "LightGBM Enhanced": {
+    "optuna": {
+      "num_leaves": {
+        "type": "int",
+        "min": 10,
+        "max": 300,
+        "log": false
+      },
+      "bagging_freq": {
+        "type": "int",
+        "min": 1,
+        "max": 7,
+        "log": false
+      },
+      "min_child_samples": {
+        "type": "int",
+        "min": 5,
+        "max": 100,
+        "log": false
+      },
+      "num_boost_round": {
+        "type": "int",
+        "min": 50,
+        "max": 500,
+        "log": false
+      },
+      "learning_rate": {
+        "type": "float",
+        "min": 0.01,
+        "max": 0.3,
+        "log": true
+      },
+      "feature_fraction": {
+        "type": "float",
+        "min": 0.4,
+        "max": 1.0,
+        "log": false
+      },
+      "bagging_fraction": {
+        "type": "float",
+        "min": 0.4,
+        "max": 1.0,
+        "log": false
+      },
+      "lambda_l1": {
+        "type": "float",
+        "min": 1e-08,
+        "max": 10.0,
+        "log": true
+      },
+      "lambda_l2": {
+        "type": "float",
+        "min": 1e-08,
+        "max": 10.0,
+        "log": true
+      }
+    },
+    "basic": {
+      "num_leaves": 31,
+      "learning_rate": 0.05
+    },
+    "file": "scripts/archive/enhanced_lightgbm_categorical.py"
+  },
+  "CatBoost Enhanced": {
+    "optuna": {
+      "iterations": {
+        "type": "int",
+        "min": 100,
+        "max": 1000,
+        "log": false
+      },
+      "depth": {
+        "type": "int",
+        "min": 4,
+        "max": 10,
+        "log": false
+      },
+      "border_count": {
+        "type": "int",
+        "min": 32,
+        "max": 255,
+        "log": false
+      },
+      "learning_rate": {
+        "type": "float",
+        "min": 0.01,
+        "max": 0.3,
+        "log": true
+      },
+      "l2_leaf_reg": {
+        "type": "float",
+        "min": 1e-08,
+        "max": 10.0,
+        "log": true
+      },
+      "bagging_temperature": {
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "log": false
+      },
+      "random_strength": {
+        "type": "float",
+        "min": 1e-08,
+        "max": 10.0,
+        "log": true
+      }
+    },
+    "basic": {
+      "iterations": 500,
+      "learning_rate": 0.05,
+      "depth": 6
+    },
+    "file": "scripts/archive/enhanced_catboost_categorical.py"
+  },
+  "ElasticNet Enhanced": {
+    "optuna": {
+      "alpha": {
+        "type": "float",
+        "min": 0.0001,
+        "max": 10.0,
+        "log": true
+      },
+      "l1_ratio": {
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "log": false
+      },
+      "tol": {
+        "type": "float",
+        "min": 1e-05,
+        "max": 0.001,
+        "log": true
+      }
+    },
+    "basic": {},
+    "file": "scripts/archive/enhanced_elasticnet_optuna.py"
+  }
+}

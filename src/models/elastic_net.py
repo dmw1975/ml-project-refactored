@@ -100,6 +100,7 @@ def run_elasticnet_model(X_data, y_data, model_name, alpha, l1_ratio,
         'n_companies': len(X_data),
         'n_companies_train': len(X_train),
         'n_companies_test': len(X_test),
+        'y_train': y_train,  # Add y_train for baseline comparisons
         'y_test': y_test,
         'y_pred': y_pred,
         'feature_names': X_data.columns.tolist(),
@@ -382,25 +383,9 @@ def train_elasticnet_models(datasets=None, use_optuna=True, n_trials=100):
         io.save_model(model_results, "elasticnet_models.pkl", settings.MODEL_DIR)
 
     # Save summary metrics
-    metrics_df = pd.DataFrame([
-        {
-            'model_name': name,
-            'RMSE': metrics['RMSE'],
-            'MAE': metrics['MAE'],
-            'MSE': metrics['MSE'],
-            'R2': metrics['R2'],
-            'alpha': metrics.get('alpha'),
-            'l1_ratio': metrics.get('l1_ratio'),
-            'n_features_used': metrics.get('n_features_used'),
-            'n_companies': metrics.get('n_companies'),
-            'cv_mse': metrics.get('cv_mse', None),
-            'cv_mse_std': metrics.get('cv_mse_std', None)
-        }
-        for name, metrics in model_results.items()
-    ])
-
-    io.ensure_dir(settings.METRICS_DIR)
-    metrics_df.to_csv(f"{settings.METRICS_DIR}/elasticnet_metrics.csv", index=False)
+    # Removed metrics DataFrame and CSV generation - Analysis showed elasticnet_metrics.csv is NEVER READ
+    # Metrics are already stored in model PKL files - Date: 2025-01-15
+    # The DataFrame was only used for CSV export which has been removed
 
     print("\nElasticNet models trained and saved successfully.")
     return model_results

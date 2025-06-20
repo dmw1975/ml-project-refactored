@@ -149,7 +149,7 @@ def check_existing_studies_for_algorithm(algorithm, datasets=None, min_trials=50
         dataset_variants = [d.replace('LR_', '') for d in datasets if d != 'all']
     
     algorithm_prefix = {
-        'xgboost': 'XGB',
+        'xgboost': 'XGBoost',
         'lightgbm': 'LightGBM', 
         'catboost': 'CatBoost'
     }[algorithm]

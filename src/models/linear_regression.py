@@ -139,6 +139,7 @@ def run_regression_model(X_data, y_data, model_name, random_state=42, test_size=
         'n_companies': len(X_data),
         'n_companies_train': len(X_train),
         'n_companies_test': len(X_test),
+        'y_train': y_train,  # Add y_train for baseline comparisons
         'y_test': y_test,
         'y_pred': y_pred,
         'n_features': model.coef_.shape[-1] if model.coef_.ndim > 1 else len(model.coef_)
@@ -244,22 +245,9 @@ def train_all_models():
     # Report model completion
     get_state_manager().increment_completed_models('linear_regression')
     
-    # Save summary to CSV
-    metrics_df = pd.DataFrame([
-        {
-            'model_name': name,
-            'RMSE': metrics['RMSE'],
-            'MAE': metrics['MAE'],
-            'MSE': metrics['MSE'],
-            'R2': metrics['R2'],
-            'n_companies': metrics['n_companies'],
-            'n_features': metrics['model'].coef_.shape[-1] if metrics['model'].coef_.ndim > 1 else len(metrics['model'].coef_)  # Add feature count to metrics
-        }
-        for name, metrics in model_results.items()
-    ])
-    
-    io.ensure_dir(settings.METRICS_DIR)
-    metrics_df.to_csv(f"{settings.METRICS_DIR}/linear_regression_metrics.csv", index=False)
+    # Removed metrics DataFrame and CSV generation - Analysis showed linear_regression_metrics.csv is NEVER READ
+    # Metrics are already stored in model PKL files - Date: 2025-01-15
+    # The DataFrame was only used for CSV export which has been removed
     
     # Print final feature counts used by each model
     print("\nFeature counts used by each model:")
@@ -378,24 +366,9 @@ def train_linear_with_elasticnet_params():
     # Save results
     io.save_model(model_results, "linear_elasticnet_models.pkl", settings.MODEL_DIR)
     
-    # Save summary to CSV
-    metrics_df = pd.DataFrame([
-        {
-            'model_name': name,
-            'RMSE': metrics['RMSE'],
-            'MAE': metrics['MAE'],
-            'MSE': metrics['MSE'],
-            'R2': metrics['R2'],
-            'alpha': metrics['alpha'],
-            'l1_ratio': metrics['l1_ratio'],
-            'n_features_used': metrics['n_features_used'],
-            'n_companies': metrics['n_companies'],
-            'model_type': 'Linear Regression with ElasticNet'
-        }
-        for name, metrics in model_results.items()
-    ])
-    
-    metrics_df.to_csv(f"{settings.METRICS_DIR}/linear_elasticnet_metrics.csv", index=False)
+    # Removed metrics DataFrame and CSV generation - Analysis showed linear_elasticnet_metrics.csv is NEVER READ
+    # Metrics are already stored in model PKL files - Date: 2025-01-15
+    # The DataFrame was only used for CSV export which has been removed
     
     print("\nLinear models with ElasticNet parameters trained and saved successfully.")
     return model_results

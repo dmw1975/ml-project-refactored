@@ -492,6 +492,9 @@ class StatisticalTestsPlot(ComparativeViz):
         """
         Create all statistical test visualizations.
         
+        Note: Enhanced significance matrix PNG files are no longer saved to disk (optimization).
+        Figures are still created and returned for potential use.
+        
         Returns:
             Dict[str, plt.Figure]: Dictionary of created figures
         """
@@ -499,7 +502,7 @@ class StatisticalTestsPlot(ComparativeViz):
         
         # 2. Create significance matrices
         # Overall matrix
-        print("Creating significance matrix for all models...")
+        print("Creating significance matrix for all models (in-memory only)...")
         overall_matrix = self.plot_significance_matrix()
         if overall_matrix:
             figures['overall_matrix'] = overall_matrix
@@ -526,19 +529,21 @@ class StatisticalTestsPlot(ComparativeViz):
                 # Ensure directory exists
                 ensure_dir(output_dir)
                 
-                # Save figure
-                save_figure(
-                    fig=overall_matrix,
-                    filename="enhanced_significance_matrix",
-                    output_dir=output_dir,
-                    dpi=self.config.get('dpi', 300),
-                    format=self.config.get('format', 'png')
-                )
+                # Removed enhanced_significance_matrix.png generation - Analysis showed this file is NEVER READ
+                # PNG files are terminal outputs only - keeping figure creation for return value
+                # Date: 2025-01-15
+                # save_figure(
+                #     fig=overall_matrix,
+                #     filename="enhanced_significance_matrix",
+                #     output_dir=output_dir,
+                #     dpi=self.config.get('dpi', 300),
+                #     format=self.config.get('format', 'png')
+                # )
         
         # Dataset-specific matrices (only Base and Yeo - reduced from previous set)
         datasets = ['Base', 'Yeo']  # Removed 'Base_Random' and 'Yeo_Random' for cleaner output
         for dataset in datasets:
-            print(f"Creating significance matrix for {dataset} dataset...")
+            print(f"Creating significance matrix for {dataset} dataset (in-memory only)...")
             dataset_matrix = self.plot_significance_matrix(dataset_filter=dataset)
             if dataset_matrix:
                 figures[f'{dataset}_matrix'] = dataset_matrix
@@ -565,14 +570,16 @@ class StatisticalTestsPlot(ComparativeViz):
                     # Ensure directory exists
                     ensure_dir(output_dir)
                     
-                    # Save figure
-                    save_figure(
-                        fig=dataset_matrix,
-                        filename=f"enhanced_significance_matrix_{dataset}",
-                        output_dir=output_dir,
-                        dpi=self.config.get('dpi', 300),
-                        format=self.config.get('format', 'png')
-                    )
+                    # Removed enhanced_significance_matrix_{dataset}.png generation - Analysis showed these files are NEVER READ
+                    # PNG files are terminal outputs only - keeping figure creation for return value
+                    # Date: 2025-01-15
+                    # save_figure(
+                    #     fig=dataset_matrix,
+                    #     filename=f"enhanced_significance_matrix_{dataset}",
+                    #     output_dir=output_dir,
+                    #     dpi=self.config.get('dpi', 300),
+                    #     format=self.config.get('format', 'png')
+                    # )
         
         # We no longer generate the win-loss summary
         # Removed for cleaner output
@@ -653,7 +660,7 @@ def visualize_statistical_tests(
         tests_df = pd.read_csv(tests_file)
         
         # Create visualizations
-        print("Generating enhanced significance matrix visualizations...")
+        print("Generating significance matrix visualizations (in-memory only)...")
         pairwise_figures = plot_statistical_tests(tests_df, config)
         
         # Add to figures dictionary
@@ -673,15 +680,30 @@ def visualize_statistical_tests(
             all_models = io.load_all_models()
             
             if all_models:
+                # Filter to include only optimized models
+                print("Filtering models for statistical tests...")
+                print(f"Total models loaded: {len(all_models)}")
+                
+                # Filter models to include only:
+                # 1. Models with "ElasticNet" in the name
+                # 2. Models ending with "_optuna" suffix
+                filtered_models = {}
+                for model_name, model_data in all_models.items():
+                    if 'ElasticNet' in model_name or model_name.endswith('_optuna'):
+                        filtered_models[model_name] = model_data
+                
+                print(f"Models after filtering (optimized only): {len(filtered_models)}")
+                print(f"Included models: {sorted(filtered_models.keys())}")
+                
                 # Check if XGBoost models are missing
-                has_xgboost = any('XGB' in model_name for model_name in all_models)
+                has_xgboost = any('XGB' in model_name for model_name in filtered_models)
                 
                 if not has_xgboost:
                     print("WARNING: No XGBoost models found. Continuing analysis with available models.")
                     print("To train XGBoost models, run: python main.py --train-xgboost")
                 
-                # Run the analysis with available models
-                _, baseline_plots = run_baseline_significance_analysis(all_models)
+                # Run the analysis with filtered models
+                _, baseline_plots = run_baseline_significance_analysis(filtered_models)
                 
                 # Add to figures dictionary
                 if baseline_plots:

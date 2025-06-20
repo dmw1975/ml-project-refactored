@@ -161,6 +161,31 @@ class CVDistributionPlot(ComparativeViz):
             print("No cross-validation metrics found in any model.")
             return None
         
+        # FILTER: Show only optimized models for fair comparison
+        # Include: Optuna-optimized tree models and ElasticNet (already optimized)
+        # Exclude: Basic tree models (untuned)
+        filtered_cv_data = []
+        for metrics in cv_data:
+            model_name = metrics['model_name']
+            model_type = metrics['model_type']
+            
+            # Include ElasticNet (already optimized) and Linear Regression (baseline)
+            if model_type in ['ElasticNet', 'Linear Regression']:
+                filtered_cv_data.append(metrics)
+            # For tree models, only include optuna versions
+            elif model_type in ['XGBoost', 'LightGBM', 'CatBoost']:
+                if 'optuna' in model_name.lower():
+                    filtered_cv_data.append(metrics)
+            else:
+                # Include any other model types
+                filtered_cv_data.append(metrics)
+        
+        cv_data = filtered_cv_data
+        
+        if not cv_data:
+            print("No optimized models with cross-validation metrics found.")
+            return None
+        
         # Filter by model types if specified
         if model_types:
             cv_data = [m for m in cv_data if m['model_type'] in model_types]
@@ -323,6 +348,29 @@ class CVDistributionPlot(ComparativeViz):
             print("No cross-validation metrics found in any model.")
             return None
         
+        # FILTER: Show only optimized models for fair comparison
+        filtered_cv_data = []
+        for metrics in cv_data:
+            model_name = metrics['model_name']
+            model_type = metrics['model_type']
+            
+            # Include ElasticNet (already optimized) and Linear Regression (baseline)
+            if model_type in ['ElasticNet', 'Linear Regression']:
+                filtered_cv_data.append(metrics)
+            # For tree models, only include optuna versions
+            elif model_type in ['XGBoost', 'LightGBM', 'CatBoost']:
+                if 'optuna' in model_name.lower():
+                    filtered_cv_data.append(metrics)
+            else:
+                # Include any other model types
+                filtered_cv_data.append(metrics)
+        
+        cv_data = filtered_cv_data
+        
+        if not cv_data:
+            print("No optimized models with cross-validation metrics found.")
+            return None
+        
         # Sort by mean RMSE
         cv_data.sort(key=lambda x: x['mean_rmse'])
         
@@ -471,3 +519,67 @@ def plot_cv_distributions(
     """
     plot = CVDistributionPlot(models, config)
     return plot.plot()
+
+
+def plot_cv_distribution_single(model_data: Union[Dict[str, Any], ModelData], config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None) -> Optional[plt.Figure]:
+    """
+    Create CV distribution plot for a single model.
+    
+    This function handles the conversion between dictionary and adapter formats
+    and creates a CV distribution plot for a single model.
+    
+    Args:
+        model_data: Either a model dictionary or adapter object
+        config: Visualization configuration
+        
+    Returns:
+        matplotlib.figure.Figure or None if CV data not available
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Convert to adapter if needed
+    if not hasattr(model_data, 'get_metadata'):
+        logger.debug(f"Converting dict to adapter for CV distribution plot")
+        from src.visualization.core.registry import get_adapter_for_model
+        adapter = get_adapter_for_model(model_data)
+    else:
+        adapter = model_data
+    
+    # Create a list with single model for CVDistributionPlot
+    # CVDistributionPlot expects a list but we'll create a modified version
+    try:
+        # Create the plot with a single model wrapped in a list
+        plot = CVDistributionPlot([adapter], config)
+        
+        # Get the figures dictionary
+        figures = plot.plot()
+        
+        # Return the first (and only) figure
+        if figures:
+            # Get the first figure from the dictionary
+            fig_name = list(figures.keys())[0]
+            return figures[fig_name]
+        else:
+            logger.warning(f"No CV distribution figure created for model")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error creating CV distribution plot: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+# Test command for single model CV distribution:
+# python -c "
+# from src.utils.io import load_all_models
+# from src.visualization.plots.cv_distributions import plot_cv_distribution_single
+# models = load_all_models()
+# catboost_model = next((m for n,m in models.items() if 'CatBoost' in n and 'cv_scores' in m), None)
+# if catboost_model:
+#     fig = plot_cv_distribution_single(catboost_model, {'output_dir': './test_cv', 'save': True})
+#     print('CV dist test:', 'PASSED' if fig else 'FAILED')
+# else:
+#     print('No CatBoost model with CV scores found')
+# "

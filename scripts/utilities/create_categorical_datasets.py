@@ -11,8 +11,13 @@ import pandas as pd
 import numpy as np
 import pickle
 import json
+import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+# Add project root to path
+project_root = Path(__file__).parent.parent.parent.absolute()
+sys.path.append(str(project_root))
 
 # Import project modules
 from src.config.settings import RAW_DATA_DIR, PROCESSED_DATA_DIR
@@ -112,7 +117,7 @@ def create_tree_models_dataset(input_path: str, output_path: str) -> Tuple[pd.Da
     Parameters
     ----------
     input_path : str
-        Path to input CSV file with one-hot encoded features
+        Path to input CSV file with native categorical features (combined_df_for_tree_models.csv)
     output_path : str
         Path to save tree models dataset
         
@@ -123,23 +128,42 @@ def create_tree_models_dataset(input_path: str, output_path: str) -> Tuple[pd.Da
     """
     print("Creating tree models dataset...")
     
-    # Read original dataset
+    # Read tree models dataset with native categorical features
     df = pd.read_csv(input_path)
-    print(f"Original dataset shape: {df.shape}")
+    print(f"Tree models input shape: {df.shape}")
     
-    # Identify categorical groups
-    categorical_groups = identify_categorical_groups(df)
-    
-    # Reconstruct categorical features
-    df_tree = reconstruct_categorical_features(df, categorical_groups)
-    
-    # Ensure categorical columns are properly typed
-    for feature_name in categorical_groups.keys():
-        if feature_name in df_tree.columns:
-            df_tree[feature_name] = df_tree[feature_name].astype('category')
+    # Check if this is the correct file
+    if 'combined_df_for_tree_models' in input_path:
+        print("✓ Using correct tree models file with native categorical features")
+        
+        # Define categorical columns that should be present
+        categorical_features = [
+            'gics_sector', 'gics_sub_ind', 'issuer_cntry_domicile_name', 'cntry_of_risk',
+            'top_1_shareholder_location', 'top_2_shareholder_location', 'top_3_shareholder_location'
+        ]
+        
+        # Verify and convert categorical columns
+        available_cat_features = []
+        for cat_col in categorical_features:
+            if cat_col in df.columns:
+                df[cat_col] = df[cat_col].astype('category')
+                available_cat_features.append(cat_col)
+                print(f"  - {cat_col}: {df[cat_col].nunique()} categories")
+            else:
+                print(f"  ! {cat_col} not found in dataset")
+        
+        # Copy the dataframe (it's already in the right format)
+        df_tree = df.copy()
+        
+    else:
+        # Fallback to old behavior if wrong file is used
+        print("WARNING: Not using tree-specific file, falling back to reconstruction")
+        categorical_groups = identify_categorical_groups(df)
+        df_tree = reconstruct_categorical_features(df, categorical_groups)
+        available_cat_features = list(categorical_groups.keys())
     
     print(f"Tree models dataset shape: {df_tree.shape}")
-    print(f"Reduced features by: {df.shape[1] - df_tree.shape[1]} columns")
+    print(f"Categorical features: {len(available_cat_features)}")
     
     # Save dataset
     ensure_dir(Path(output_path).parent)
@@ -149,11 +173,10 @@ def create_tree_models_dataset(input_path: str, output_path: str) -> Tuple[pd.Da
     # Create metadata
     metadata = {
         'dataset_type': 'tree_models',
-        'categorical_features': list(categorical_groups.keys()),
-        'categorical_groups': categorical_groups,
+        'categorical_features': available_cat_features,
         'original_shape': df.shape,
         'tree_dataset_shape': df_tree.shape,
-        'features_reduced': df.shape[1] - df_tree.shape[1]
+        'nan_count': df_tree.isna().sum().sum()
     }
     
     return df_tree, metadata
@@ -240,13 +263,14 @@ def main():
     print("=" * 60)
     
     # Define paths
-    input_path = RAW_DATA_DIR / 'combined_df_for_ml_models.csv'
+    tree_input_path = RAW_DATA_DIR / 'combined_df_for_tree_models.csv'  # FIXED: Use tree-specific file
+    linear_input_path = RAW_DATA_DIR / 'combined_df_for_ml_models.csv'
     tree_output_path = PROCESSED_DATA_DIR / 'tree_models_dataset.csv'
     linear_output_path = PROCESSED_DATA_DIR / 'linear_models_dataset.csv'
     
     # Create datasets
-    df_tree, tree_metadata = create_tree_models_dataset(str(input_path), str(tree_output_path))
-    df_linear, linear_metadata = create_linear_models_dataset(str(input_path), str(linear_output_path))
+    df_tree, tree_metadata = create_tree_models_dataset(str(tree_input_path), str(tree_output_path))
+    df_linear, linear_metadata = create_linear_models_dataset(str(linear_input_path), str(linear_output_path))
     
     # Save metadata
     save_metadata_and_mappings(tree_metadata, linear_metadata, str(PROCESSED_DATA_DIR))
@@ -254,11 +278,12 @@ def main():
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    print(f"Original dataset: {input_path}")
+    print(f"Tree input dataset: {tree_input_path}")
+    print(f"Linear input dataset: {linear_input_path}")
     print(f"Tree models dataset: {tree_output_path} ({df_tree.shape})")
     print(f"Linear models dataset: {linear_output_path} ({df_linear.shape})")
-    print(f"Categorical features reconstructed: {len(tree_metadata.get('categorical_features', []))}")
-    print(f"Features reduced for tree models: {tree_metadata.get('features_reduced', 0)}")
+    print(f"Categorical features in tree dataset: {len(tree_metadata.get('categorical_features', []))}")
+    print(f"NaN values in tree dataset: {tree_metadata.get('nan_count', 0)}")
     print("\nCategorical features in tree dataset:")
     for feature in tree_metadata.get('categorical_features', []):
         unique_count = df_tree[feature].nunique() if feature in df_tree.columns else 0

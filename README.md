@@ -1,5 +1,8 @@
 # ML Project for ESG Score Prediction
 
+
+> **⚠️ FOR CLAUDE/AI ASSISTANTS: Please read README-CLAUDE.md before making any changes**
+
 ## 📋 Table of Contents
 - [Overview](#overview)
 - [Features](#features)

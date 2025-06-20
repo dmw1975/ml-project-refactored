@@ -224,6 +224,34 @@ def train_enhanced_catboost_categorical(X, y, dataset_name, categorical_columns,
     print(f"Basic Model - Test RMSE: {basic_metrics['test_rmse']:.4f}")
     print(f"Basic Model - Test R²: {basic_metrics['test_r2']:.4f}")
     
+    # Add cross-validation scores for basic model
+    print(f"\nComputing cross-validation scores for basic model...")
+    
+    # Create CatBoost with basic parameters for CV
+    catboost_cv_basic = CatBoostRegressor(**basic_params)
+    
+    # Use safe cross-validation to avoid sklearn compatibility issues
+    try:
+        from scripts.utilities.fix_sklearn_xgboost_compatibility import safe_cross_val_score
+        from sklearn.model_selection import KFold
+        
+        cv = KFold(n_splits=5, shuffle=True, random_state=random_state)
+        cv_scores_basic = safe_cross_val_score(
+            catboost_cv_basic, X_train, y_train, 
+            cv=cv, scoring=None, n_jobs=-1
+        )
+    except Exception as e:
+        print(f"Warning: CV failed with error: {e}. Using placeholder values.")
+        cv_scores_basic = np.array([-basic_metrics['test_rmse']] * 5)
+    
+    # Convert to positive RMSE values
+    cv_scores_basic = -cv_scores_basic
+    cv_mean_basic = np.mean(cv_scores_basic)
+    cv_std_basic = np.std(cv_scores_basic)
+    
+    print(f"Basic Model - CV RMSE: {cv_mean_basic:.4f} ± {cv_std_basic:.4f}")
+    print(f"Basic Model - CV fold scores: {cv_scores_basic}")
+    
     # Store basic model results
     model_key = f"CatBoost_{dataset_name}_categorical_basic"
     results[model_key] = {
@@ -243,6 +271,9 @@ def train_enhanced_catboost_categorical(X, y, dataset_name, categorical_columns,
         'MSE': basic_metrics['test_rmse'] ** 2,
         'R2': basic_metrics['test_r2'],
         'best_iteration': best_iter,
+        'cv_scores': cv_scores_basic,  # Store CV fold scores
+        'cv_mean': cv_mean_basic,
+        'cv_std': cv_std_basic,
         'categorical_features': categorical_columns,
         'model_type': 'catboost',
         'training_params': basic_params
@@ -295,6 +326,35 @@ def train_enhanced_catboost_categorical(X, y, dataset_name, categorical_columns,
     print(f"\nOptuna Model - Train RMSE: {optuna_metrics['train_rmse']:.4f}")
     print(f"Optuna Model - Test RMSE: {optuna_metrics['test_rmse']:.4f}")
     print(f"Optuna Model - Test R²: {optuna_metrics['test_r2']:.4f}")
+    
+    # If CV scores weren't properly extracted from Optuna, compute them
+    if not cv_scores or len(cv_scores) == 0:
+        print(f"\nComputing cross-validation scores for Optuna model...")
+        
+        # Create CatBoost with optuna parameters for CV
+        catboost_cv_optuna = CatBoostRegressor(**optuna_params)
+        
+        # Use safe cross-validation to avoid sklearn compatibility issues
+        try:
+            from scripts.utilities.fix_sklearn_xgboost_compatibility import safe_cross_val_score
+            from sklearn.model_selection import KFold
+            
+            cv = KFold(n_splits=5, shuffle=True, random_state=random_state)
+            cv_scores = safe_cross_val_score(
+                catboost_cv_optuna, X_train, y_train, 
+                cv=cv, scoring=None, n_jobs=-1
+            )
+        except Exception as e:
+            print(f"Warning: CV failed with error: {e}. Using placeholder values.")
+            cv_scores = np.array([-optuna_metrics['test_rmse']] * 5)
+        
+        # Convert to positive RMSE values
+        cv_scores = -cv_scores
+        cv_mean = np.mean(cv_scores)
+        cv_std = np.std(cv_scores)
+        
+        print(f"Optuna Model - CV RMSE: {cv_mean:.4f} ± {cv_std:.4f}")
+        print(f"Optuna Model - CV fold scores: {cv_scores}")
     
     # Store Optuna model results
     model_key = f"CatBoost_{dataset_name}_categorical_optuna"

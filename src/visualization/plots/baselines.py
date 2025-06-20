@@ -67,7 +67,7 @@ def create_metric_baseline_comparison(
     # Extract model type from model name
     def extract_model_type(model_name):
         base_name = model_name.split('_')[0]  # Remove baseline type suffix
-        if base_name.startswith('XGB'):
+        if base_name.startswith('XGBoost'):
             return 'XGBoost'
         elif base_name.startswith('LightGBM'):
             return 'LightGBM'
@@ -293,7 +293,7 @@ def create_baseline_improvement_chart(
     # Extract model type
     def extract_model_type(model_name):
         base_name = model_name.split('_')[0]  # Remove baseline type suffix
-        if base_name.startswith('XGB'):
+        if base_name.startswith('XGBoost'):
             return 'XGBoost'
         elif base_name.startswith('LightGBM'):
             return 'LightGBM'
@@ -452,7 +452,21 @@ def visualize_all_baseline_comparisons(
         Dictionary mapping visualization names to output paths
     """
     if baseline_data_path is None:
-        baseline_data_path = settings.METRICS_DIR / "baseline_comparison.csv"
+        # Check if adapted CSV exists, otherwise create it from original
+        adapted_path = settings.METRICS_DIR / "baseline_comparison_adapted.csv"
+        original_path = settings.METRICS_DIR / "baseline_comparison.csv"
+        
+        if not adapted_path.exists() and original_path.exists():
+            # Create adapted CSV if needed
+            import sys
+            sys.path.append(str(Path(__file__).parents[3]))
+            from fix_baseline_viz_adapter import create_adapted_baseline_csv
+            create_adapted_baseline_csv()
+        
+        if adapted_path.exists():
+            baseline_data_path = adapted_path
+        else:
+            baseline_data_path = original_path
     
     if output_dir is None:
         output_dir = settings.VISUALIZATION_DIR / "baselines"
@@ -577,7 +591,7 @@ def create_metric_comparison_plots(baseline_data_path, output_dir=None, figsize=
     
     # Extract model type
     def extract_model_type(model_name):
-        if model_name.startswith('XGB'):
+        if model_name.startswith('XGBoost'):
             return 'XGBoost'
         elif model_name.startswith('LightGBM'):
             return 'LightGBM'
@@ -1004,7 +1018,7 @@ def create_baseline_types_comparison_heatmap(
     model_info = []
     for model_name in df['Model']:
         # Get base algorithm
-        if model_name.startswith('XGB'):
+        if model_name.startswith('XGBoost'):
             algorithm = 'XGBoost'
         elif model_name.startswith('LightGBM'):
             algorithm = 'LightGBM'

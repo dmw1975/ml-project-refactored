@@ -1,0 +1,49 @@
+2025-06-11 19:14:03,068 - INFO - Starting PROPER XGBoost feature removal analysis...
+2025-06-11 19:14:03,068 - INFO - Feature to remove: top_3_shareholder_percentage
+2025-06-11 19:14:03,068 - INFO - Optuna trials: 10
+2025-06-11 19:14:03,301 - INFO - Base_Random data shape: (2202, 34)
+2025-06-11 19:14:03,301 - INFO - Categorical columns: ['gics_sector', 'gics_sub_ind', 'issuer_cntry_domicile', 'cntry_of_risk', 'top_1_shareholder_location', 'top_2_shareholder_location', 'top_3_shareholder_location']
+2025-06-11 19:14:03,301 - INFO - All features: ['market_cap_usd', 'net_income_usd', 'hist_pe', 'hist_book_px', 'hist_fcf_yld', 'hist_ebitda_ev', 'hist_roe', 'hist_roic', 'hist_roa', 'hist_gross_profit_usd', 'hist_net_chg_lt_debt_usd', 'hist_net_debt_usd', 'hist_ev_usd', 'hist_asset_turnover', 'hist_capex_sales', 'hist_capex_depr', 'hist_rd_exp_usd', 'hist_eps_usd', 'return_usd', 'vola', 'beta', 'shares_outstanding', 'shares_float', 'top_1_shareholder_percentage', 'top_2_shareholder_percentage', 'top_3_shareholder_percentage', 'gics_sector', 'gics_sub_ind', 'issuer_cntry_domicile', 'cntry_of_risk', 'top_1_shareholder_location', 'top_2_shareholder_location', 'top_3_shareholder_location', 'random_feature']
+2025-06-11 19:14:03,301 - INFO - Feature exists: True
+2025-06-11 19:14:03,303 - ERROR - Failed to create dataset splits: Input contains NaN
+Registered adapter XGBoostAdapter for model type xgboost
+Registered adapter LightGBMAdapter for model type lightgbm
+Registered adapter CatBoostAdapter for model type catboost
+Registered adapter ElasticNetAdapter for model type elasticnet
+Registered adapter LinearRegressionAdapter for model type linearregression
+Registered adapter LinearRegressionAdapter for model type linear_regression
+Loaded tree models data: (2202, 59) features, 2202 samples
+Categorical features: ['gics_sector', 'gics_sub_ind', 'issuer_cntry_domicile', 'cntry_of_risk', 'top_1_shareholder_location', 'top_2_shareholder_location', 'top_3_shareholder_location']
+Loaded tree models data: (2202, 59) features, 2202 samples
+Categorical features: ['gics_sector', 'gics_sub_ind', 'issuer_cntry_domicile', 'cntry_of_risk', 'top_1_shareholder_location', 'top_2_shareholder_location', 'top_3_shareholder_location']
+Base features: (2202, 33) (26 quantitative + 7 categorical)
+Yeo features: (2202, 33) (26 quantitative + 7 categorical)
+Added random feature. Dataset shape: (2202, 34)
+Traceback (most recent call last):
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 921, in <module>
+    main()
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 917, in main
+    analyzer.run_analysis()
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 75, in run_analysis
+    datasets = self._load_datasets()
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 176, in _load_datasets
+    results.update(self._create_dataset_splits('Base_Random', base_random_data, target, categorical_columns))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 204, in _create_dataset_splits
+    X_train, X_test, y_train, y_test = train_test_split(
+                                       ^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/sklearn/utils/_param_validation.py", line 216, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/sklearn/model_selection/_split.py", line 2872, in train_test_split
+    train, test = next(cv.split(X=arrays[0], y=stratify))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/sklearn/model_selection/_split.py", line 2405, in split
+    y = check_array(y, input_name="y", ensure_2d=False, dtype=None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/sklearn/utils/validation.py", line 1107, in check_array
+    _assert_all_finite(
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/sklearn/utils/validation.py", line 105, in _assert_all_finite
+    raise ValueError("Input contains NaN")
+ValueError: Input contains NaN

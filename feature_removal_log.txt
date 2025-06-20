@@ -1,0 +1,48 @@
+2025-06-11 19:00:07,964 - INFO - Starting PROPER XGBoost feature removal analysis...
+2025-06-11 19:00:07,964 - INFO - Feature to remove: top_3_shareholder_percentage
+2025-06-11 19:00:07,964 - INFO - Optuna trials: 100
+2025-06-11 19:00:07,977 - INFO - 
+Loading Base_Random dataset...
+2025-06-11 19:00:08,120 - INFO - Base_Random data shape after conversion: (2202, 28)
+2025-06-11 19:00:08,121 - INFO - Categorical columns: ['gics_sector']
+2025-06-11 19:00:08,121 - INFO - All features: ['market_cap_usd', 'net_income_usd', 'hist_pe', 'hist_book_px', 'hist_fcf_yld', 'hist_ebitda_ev', 'hist_roe', 'hist_roic', 'hist_roa', 'hist_gross_profit_usd', 'hist_net_chg_lt_debt_usd', 'hist_net_debt_usd', 'hist_ev_usd', 'hist_asset_turnover', 'hist_capex_sales', 'hist_capex_depr', 'hist_rd_exp_usd', 'hist_eps_usd', 'return_usd', 'vola', 'beta', 'shares_outstanding', 'shares_float', 'top_1_shareholder_percentage', 'top_2_shareholder_percentage', 'top_3_shareholder_percentage', 'gics_sector', 'random_feature']
+2025-06-11 19:00:08,121 - INFO - Feature exists: True
+2025-06-11 19:00:08,131 - INFO - Removed feature: top_3_shareholder_percentage
+2025-06-11 19:00:08,132 - INFO - 
+Loading Yeo_Random dataset...
+2025-06-11 19:00:08,202 - INFO - Yeo_Random data shape after conversion: (2202, 54)
+2025-06-11 19:00:08,202 - INFO - Categorical columns: ['gics_sector']
+2025-06-11 19:00:08,202 - INFO - All features: ['market_cap_usd', 'net_income_usd', 'hist_pe', 'hist_book_px', 'hist_fcf_yld', 'hist_ebitda_ev', 'hist_roe', 'hist_roic', 'hist_roa', 'hist_gross_profit_usd', 'hist_net_chg_lt_debt_usd', 'hist_net_debt_usd', 'hist_ev_usd', 'hist_asset_turnover', 'hist_capex_sales', 'hist_capex_depr', 'hist_rd_exp_usd', 'hist_eps_usd', 'return_usd', 'vola', 'beta', 'shares_outstanding', 'shares_float', 'top_1_shareholder_percentage', 'top_2_shareholder_percentage', 'top_3_shareholder_percentage', 'yeo_joh_beta', 'yeo_joh_hist_asset_turnover', 'yeo_joh_hist_book_px', 'yeo_joh_hist_capex_depr', 'yeo_joh_hist_capex_sales', 'yeo_joh_hist_ebitda_ev', 'yeo_joh_hist_eps_usd', 'yeo_joh_hist_ev_usd', 'yeo_joh_hist_fcf_yld', 'yeo_joh_hist_gross_profit_usd', 'yeo_joh_hist_net_chg_lt_debt_usd', 'yeo_joh_hist_net_debt_usd', 'yeo_joh_hist_pe', 'yeo_joh_hist_rd_exp_usd', 'yeo_joh_hist_roa', 'yeo_joh_hist_roe', 'yeo_joh_hist_roic', 'yeo_joh_market_cap_usd', 'yeo_joh_net_income_usd', 'yeo_joh_return_usd', 'yeo_joh_shares_float', 'yeo_joh_shares_outstanding', 'yeo_joh_top_1_shareholder_percentage', 'yeo_joh_top_2_shareholder_percentage', 'yeo_joh_top_3_shareholder_percentage', 'yeo_joh_vola', 'gics_sector', 'random_feature']
+2025-06-11 19:00:08,202 - INFO - Feature exists: True
+2025-06-11 19:00:08,205 - INFO - Removed feature: yeo_joh_top_3_shareholder_percentage
+2025-06-11 19:00:08,205 - INFO - 
+============================================================
+2025-06-11 19:00:08,205 - INFO - Processing Base_Random dataset...
+2025-06-11 19:00:08,205 - INFO - ============================================================
+2025-06-11 19:00:08,205 - INFO - 
+Loading existing optimized model for Base_Random WITH feature...
+2025-06-11 19:00:08,206 - INFO - Loading existing model from outputs/models/xgboost_models.pkl
+2025-06-11 19:00:10,069 - INFO - Successfully loaded XGBoost_Base_Random_categorical_optuna - RMSE: 1.6134, R²: 0.2158
+Registered adapter XGBoostAdapter for model type xgboost
+Registered adapter LightGBMAdapter for model type lightgbm
+Registered adapter CatBoostAdapter for model type catboost
+Registered adapter ElasticNetAdapter for model type elasticnet
+Registered adapter LinearRegressionAdapter for model type linearregression
+Registered adapter LinearRegressionAdapter for model type linear_regression
+Traceback (most recent call last):
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 993, in <module>
+    main()
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 989, in main
+    analyzer.run_analysis()
+  File "/mnt/d/ml_project_refactored/xgboost_feature_removal_proper.py", line 105, in run_analysis
+    results_with['y_pred'] = results_with['model'].predict(data_with['X_test'])
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/xgboost/sklearn.py", line 1186, in predict
+    predts = self.get_booster().inplace_predict(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/xgboost/core.py", line 2514, in inplace_predict
+    self._validate_features(fns)
+  File "/mnt/d/ml_project_refactored/.venv/lib/python3.12/site-packages/xgboost/core.py", line 3079, in _validate_features
+    raise ValueError(msg.format(self.feature_names, feature_names))
+ValueError: feature_names mismatch: ['market_cap_usd', 'net_income_usd', 'hist_pe', 'hist_book_px', 'hist_fcf_yld', 'hist_ebitda_ev', 'hist_roe', 'hist_roic', 'hist_roa', 'hist_gross_profit_usd', 'hist_net_chg_lt_debt_usd', 'hist_net_debt_usd', 'hist_ev_usd', 'hist_asset_turnover', 'hist_capex_sales', 'hist_capex_depr', 'hist_rd_exp_usd', 'hist_eps_usd', 'return_usd', 'vola', 'beta', 'shares_outstanding', 'shares_float', 'top_1_shareholder_percentage', 'top_2_shareholder_percentage', 'top_3_shareholder_percentage', 'gics_sector', 'gics_sub_ind', 'issuer_cntry_domicile', 'cntry_of_risk', 'top_1_shareholder_location', 'top_2_shareholder_location', 'top_3_shareholder_location', 'random_feature'] ['market_cap_usd', 'net_income_usd', 'hist_pe', 'hist_book_px', 'hist_fcf_yld', 'hist_ebitda_ev', 'hist_roe', 'hist_roic', 'hist_roa', 'hist_gross_profit_usd', 'hist_net_chg_lt_debt_usd', 'hist_net_debt_usd', 'hist_ev_usd', 'hist_asset_turnover', 'hist_capex_sales', 'hist_capex_depr', 'hist_rd_exp_usd', 'hist_eps_usd', 'return_usd', 'vola', 'beta', 'shares_outstanding', 'shares_float', 'top_1_shareholder_percentage', 'top_2_shareholder_percentage', 'top_3_shareholder_percentage', 'gics_sector', 'random_feature']
+expected top_2_shareholder_location, gics_sub_ind, cntry_of_risk, top_3_shareholder_location, top_1_shareholder_location, issuer_cntry_domicile in input data

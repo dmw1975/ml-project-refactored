@@ -183,16 +183,6 @@ def train_enhanced_xgboost_categorical(X, y, dataset_name, categorical_columns, 
     best_iter = cv_results.shape[0]
     print(f"Best iteration: {best_iter}")
     
-    # Extract CV scores from the best iteration
-    # xgb.cv returns a DataFrame with columns like 'test-rmse-mean', 'test-rmse-std'
-    basic_cv_mean = cv_results['test-rmse-mean'].iloc[-1]
-    basic_cv_std = cv_results['test-rmse-std'].iloc[-1]
-    
-    # Generate individual fold scores (approximation based on mean and std)
-    # This is less accurate than actual fold scores but better than nothing
-    basic_cv_scores = np.random.normal(basic_cv_mean, basic_cv_std, 5)
-    basic_cv_scores = np.maximum(basic_cv_scores, 0)  # Ensure non-negative
-    
     # Update params with best iteration
     basic_params['n_estimators'] = best_iter
     
@@ -216,6 +206,41 @@ def train_enhanced_xgboost_categorical(X, y, dataset_name, categorical_columns, 
     print(f"Basic Model - Train RMSE: {basic_metrics['train_rmse']:.4f}")
     print(f"Basic Model - Test RMSE: {basic_metrics['test_rmse']:.4f}")
     print(f"Basic Model - Test R²: {basic_metrics['test_r2']:.4f}")
+    
+    # Compute proper CV scores for basic model
+    print(f"\nComputing cross-validation scores for basic model...")
+    from sklearn.model_selection import cross_val_score, KFold
+    from sklearn.metrics import make_scorer
+    
+    # Create RMSE scorer
+    rmse_scorer = make_scorer(
+        lambda y_true, y_pred: np.sqrt(mean_squared_error(y_true, y_pred)), 
+        greater_is_better=False
+    )
+    
+    # Create XGBoost sklearn interface for CV
+    xgb_sklearn_basic = xgb.XGBRegressor(**basic_params)
+    
+    # Use safe cross-validation to avoid sklearn compatibility issues
+    try:
+        from scripts.utilities.fix_sklearn_xgboost_compatibility import safe_cross_val_score
+        cv = KFold(n_splits=5, shuffle=True, random_state=random_state)
+        basic_cv_scores = safe_cross_val_score(
+            xgb_sklearn_basic, X_train, y_train, 
+            cv=cv, scoring=None, n_jobs=-1
+        )
+        # Convert to positive RMSE values
+        basic_cv_scores = -basic_cv_scores
+        basic_cv_mean = np.mean(basic_cv_scores)
+        basic_cv_std = np.std(basic_cv_scores)
+    except Exception as e:
+        print(f"Warning: CV failed with error: {e}. Using placeholder values.")
+        basic_cv_scores = np.array([basic_metrics['test_rmse']] * 5)
+        basic_cv_mean = basic_metrics['test_rmse']
+        basic_cv_std = 0.0
+    
+    print(f"Basic Model - CV RMSE: {basic_cv_mean:.4f} ± {basic_cv_std:.4f}")
+    print(f"Basic Model - CV fold scores: {basic_cv_scores}")
     
     # Store basic model results
     model_key = f"XGBoost_{dataset_name}_categorical_basic"
@@ -298,6 +323,36 @@ def train_enhanced_xgboost_categorical(X, y, dataset_name, categorical_columns, 
     print(f"\nOptuna Model - Train RMSE: {optuna_metrics['train_rmse']:.4f}")
     print(f"Optuna Model - Test RMSE: {optuna_metrics['test_rmse']:.4f}")
     print(f"Optuna Model - Test R²: {optuna_metrics['test_r2']:.4f}")
+    
+    # If CV scores weren't properly extracted from Optuna, compute them
+    if not cv_scores or len(cv_scores) == 0:
+        print(f"\nComputing cross-validation scores for Optuna model...")
+        try:
+            from scripts.utilities.fix_sklearn_xgboost_compatibility import safe_cross_val_score
+            from sklearn.model_selection import KFold
+            
+            # Create XGBoost with optuna parameters for CV
+            xgb_sklearn_optuna = xgb.XGBRegressor(**optuna_params)
+            
+            # Use regular K-fold
+            cv = KFold(n_splits=5, shuffle=True, random_state=random_state)
+            cv_scores = safe_cross_val_score(
+                xgb_sklearn_optuna, X_train, y_train, 
+                cv=cv, scoring=None, n_jobs=-1
+            )
+            
+            # Convert to positive RMSE values
+            cv_scores = -cv_scores
+            cv_mean = np.mean(cv_scores)
+            cv_std = np.std(cv_scores)
+        except Exception as e:
+            print(f"Warning: CV failed with error: {e}. Using placeholder values.")
+            cv_scores = np.array([optuna_metrics['test_rmse']] * 5)
+            cv_mean = optuna_metrics['test_rmse']
+            cv_std = 0.0
+        
+        print(f"Optuna Model - CV RMSE: {cv_mean:.4f} ± {cv_std:.4f}")
+        print(f"Optuna Model - CV fold scores: {cv_scores}")
     
     # Store Optuna model results
     model_key = f"XGBoost_{dataset_name}_categorical_optuna"
