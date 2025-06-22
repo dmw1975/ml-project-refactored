@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 import pickle
+import logging
 from pathlib import Path
 import sys
 import os
@@ -11,6 +12,8 @@ import os
 
 from src.config import settings
 from src.utils import io
+
+logger = logging.getLogger(__name__)
 
 def load_features_data():
     """Load features dataset."""
@@ -26,8 +29,11 @@ def load_features_data():
     # Try each path
     for path in potential_paths:
         if path.exists():
-            print(f"Loading features from: {path}")
-            return pd.read_csv(path)
+            logger.info(f"Loading features from: {path}")
+            df = pd.read_csv(path)
+            logger.info(f"Loaded features shape: {df.shape}")
+            logger.debug(f"Feature columns: {df.columns.tolist()[:10]}... (showing first 10)")
+            return df
     
     # If we can't find the file, raise a helpful error
     raise FileNotFoundError(
@@ -49,13 +55,16 @@ def load_scores_data():
     # Try each path
     for path in potential_paths:
         if path.exists():
-            print(f"Loading scores from: {path}")
+            logger.info(f"Loading scores from: {path}")
             scores_df = pd.read_csv(path)
+            logger.info(f"Loaded scores shape: {scores_df.shape}")
             # Return the esg_score column as a Series
             if 'esg_score' in scores_df.columns:
+                logger.info("Found 'esg_score' column")
                 return scores_df['esg_score']
             else:
                 # Fallback: assume the score is in the second column (index 1)
+                logger.warning("'esg_score' column not found, using second column")
                 return scores_df.iloc[:, 1]
     
     # If we can't find the file, raise a helpful error
@@ -95,9 +104,10 @@ def get_base_and_yeo_features(feature_df):
     if not base_path.exists():
         raise FileNotFoundError(f"Base columns pickle file not found at: {base_path}")
     
-    print(f"Loading base columns from: {base_path}")
+    logger.info(f"Loading base columns from: {base_path}")
     with open(base_path, 'rb') as f:
         base_columns = pickle.load(f)
+    logger.info(f"Loaded {len(base_columns)} base columns")
     
     # Load yeo columns with proper error handling  
     if not yeo_path.exists():

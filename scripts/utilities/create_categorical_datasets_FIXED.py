@@ -20,7 +20,7 @@ def main():
     print("Creating FIXED tree models dataset...")
     
     # Use the FIXED tree models file
-    input_path = RAW_DATA_DIR / "combined_df_for_tree_models_FIXED.csv"
+    input_path = RAW_DATA_DIR / "combined_df_for_tree_models.csv"
     if not input_path.exists():
         print(f"ERROR: Fixed dataset not found at {input_path}")
         print("Run fix_tree_models_dataset.py first!")

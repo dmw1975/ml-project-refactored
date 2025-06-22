@@ -4,10 +4,13 @@ import pandas as pd
 import numpy as np
 import pickle
 import json
+import logging
 from pathlib import Path
 from typing import Tuple, Dict, List, Optional
 
 from src.config.settings import PROCESSED_DATA_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def load_tree_models_data() -> Tuple[pd.DataFrame, pd.Series]:
@@ -22,7 +25,10 @@ def load_tree_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     # Load tree models dataset
     tree_data_path = PROCESSED_DATA_DIR / 'tree_models_dataset.csv'
     
+    logger.info(f"Loading tree models data from: {tree_data_path}")
+    
     if not tree_data_path.exists():
+        logger.error(f"Tree models dataset not found at {tree_data_path}")
         raise FileNotFoundError(
             f"Tree models dataset not found at {tree_data_path}. "
             "Run create_categorical_datasets.py first."
@@ -30,13 +36,17 @@ def load_tree_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     
     # Load data
     df = pd.read_csv(tree_data_path)
+    logger.info(f"Loaded tree models data shape: {df.shape}")
+    logger.debug(f"Tree models columns: {df.columns.tolist()[:10]}... (showing first 10)")
     
     # Load scores - need to get the full DataFrame to access issuer_name
     scores_path = Path("data/raw/score.csv")
     if not scores_path.exists():
         scores_path = PROCESSED_DATA_DIR / "score.csv"
     
+    logger.info(f"Loading scores from: {scores_path}")
     scores_df = pd.read_csv(scores_path)
+    logger.info(f"Loaded scores shape: {scores_df.shape}")
     scores_df = scores_df.set_index('issuer_name')
     scores = scores_df['esg_score']
     
@@ -49,14 +59,17 @@ def load_tree_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     features = df.loc[common_indices].copy()
     target = scores.loc[common_indices].copy()
     
+    logger.info(f"After alignment: {len(common_indices)} common samples")
+    
     # Ensure categorical columns are properly typed
     categorical_features = get_categorical_features()
     for cat_feature in categorical_features:
         if cat_feature in features.columns:
             features[cat_feature] = features[cat_feature].astype('category')
     
-    print(f"Loaded tree models data: {features.shape} features, {len(target)} samples")
-    print(f"Categorical features: {categorical_features}")
+    logger.info(f"Final tree models data: {features.shape} features, {len(target)} samples")
+    logger.info(f"Categorical features ({len(categorical_features)}): {categorical_features}")
+    logger.info(f"Numerical features: {features.shape[1] - len(categorical_features)}")
     
     return features, target
 
@@ -73,7 +86,10 @@ def load_linear_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     # Load linear models dataset
     linear_data_path = PROCESSED_DATA_DIR / 'linear_models_dataset.csv'
     
+    logger.info(f"Loading linear models data from: {linear_data_path}")
+    
     if not linear_data_path.exists():
+        logger.error(f"Linear models dataset not found at {linear_data_path}")
         raise FileNotFoundError(
             f"Linear models dataset not found at {linear_data_path}. "
             "Run create_categorical_datasets.py first."
@@ -81,13 +97,17 @@ def load_linear_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     
     # Load data
     df = pd.read_csv(linear_data_path)
+    logger.info(f"Loaded linear models data shape: {df.shape}")
+    logger.debug(f"Linear models columns: {df.columns.tolist()[:10]}... (showing first 10)")
     
     # Load scores - need to get the full DataFrame to access issuer_name
     scores_path = Path("data/raw/score.csv")
     if not scores_path.exists():
         scores_path = PROCESSED_DATA_DIR / "score.csv"
     
+    logger.info(f"Loading scores from: {scores_path}")
     scores_df = pd.read_csv(scores_path)
+    logger.info(f"Loaded scores shape: {scores_df.shape}")
     scores_df = scores_df.set_index('issuer_name')
     scores = scores_df['esg_score']
     
@@ -100,7 +120,17 @@ def load_linear_models_data() -> Tuple[pd.DataFrame, pd.Series]:
     features = df.loc[common_indices].copy()
     target = scores.loc[common_indices].copy()
     
-    print(f"Loaded linear models data: {features.shape} features, {len(target)} samples")
+    logger.info(f"After alignment: {len(common_indices)} common samples")
+    logger.info(f"Final linear models data: {features.shape} features, {len(target)} samples")
+    
+    # Count one-hot features
+    one_hot_patterns = ['gics_sector_', 'gics_sub_ind_', 'issuer_cntry_domicile_name_',
+                       'cntry_of_risk_', 'top_1_shareholder_location_',
+                       'top_2_shareholder_location_', 'top_3_shareholder_location_']
+    one_hot_count = sum(1 for col in features.columns 
+                       if any(col.startswith(pattern) for pattern in one_hot_patterns))
+    logger.info(f"One-hot encoded features: {one_hot_count}")
+    logger.info(f"Other features: {features.shape[1] - one_hot_count}")
     
     return features, target
 

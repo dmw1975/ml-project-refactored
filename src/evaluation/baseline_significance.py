@@ -299,9 +299,12 @@ def test_models_against_baselines_improved(models_dict, baseline_types=None, ran
         if not isinstance(model_data, dict):
             continue
             
-        # Skip baseline models
-        if any(baseline in model_name for baseline in ['_Random', '_Mean', '_Median']):
+        # Skip baseline models (but NOT models with random features)
+        # Only skip if the model name ends with _mean or _median (actual baseline models)
+        if model_name.endswith('_mean') or model_name.endswith('_median'):
             continue
+        # Note: We intentionally DO NOT skip models with '_Random' as these are
+        # legitimate models trained with an additional random feature
             
         # Get test data
         y_test = model_data.get('y_test')
@@ -566,8 +569,18 @@ def _create_baseline_comparison_plot(results_df, baseline_type, base_path=None, 
     # Filter data for this baseline
     df_baseline = results_df[results_df['Baseline'] == baseline_type].copy()
     
+    # FILTER FOR OPTIMIZED MODELS ONLY IN VISUALIZATION
+    # Keep only models with 'optuna' (tree models) or 'ElasticNet' (always optimized)
+    print(f"Filtering visualization to show only optimized models...")
+    df_baseline = df_baseline[
+        (df_baseline['Model'].str.contains('optuna')) | 
+        (df_baseline['Model'].str.contains('ElasticNet'))
+    ].copy()
+    
+    print(f"Visualization will show {len(df_baseline)} optimized models for {baseline_type} baseline")
+    
     if df_baseline.empty:
-        print(f"No results for baseline type: {baseline_type}")
+        print(f"No optimized results for baseline type: {baseline_type}")
         return None
     
     # Extract model name components for better display
@@ -834,6 +847,15 @@ def create_baseline_significance_table(results_df, output_path=None):
         print("No results to create table.")
         return None
     
+    # FILTER FOR OPTIMIZED MODELS ONLY IN TABLE VISUALIZATION
+    print(f"Filtering significance table to show only optimized models...")
+    results_df_filtered = results_df[
+        (results_df['Model'].str.contains('optuna')) | 
+        (results_df['Model'].str.contains('ElasticNet'))
+    ].copy()
+    
+    print(f"Significance table will show {len(results_df_filtered['Model'].unique())} optimized models")
+    
     # Process data for table
     # Extract model algorithm and dataset info
     def extract_model_info(model_name):
@@ -870,7 +892,7 @@ def create_baseline_significance_table(results_df, output_path=None):
     
     # Add algorithm and dataset columns
     model_info = []
-    for model in results_df['Model'].unique():
+    for model in results_df_filtered['Model'].unique():
         algorithm, dataset, is_optimized = extract_model_info(model)
         model_info.append({
             'Model': model,
@@ -882,7 +904,7 @@ def create_baseline_significance_table(results_df, output_path=None):
     model_info_df = pd.DataFrame(model_info)
     
     # Merge with results
-    results_with_info = pd.merge(results_df, model_info_df, on='Model')
+    results_with_info = pd.merge(results_df_filtered, model_info_df, on='Model')
     
     # Create pivot table for display
     # Create a unique model label

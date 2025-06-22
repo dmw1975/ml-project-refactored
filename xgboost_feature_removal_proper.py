@@ -475,9 +475,14 @@ class ProperXGBoostFeatureRemoval:
                 n_test = data_info.get('n_test', 441)
                 
                 # Get feature counts
-                n_features = model_data.get('n_features', 33 if 'Random' in dataset_name else 32)
-                if model_type == 'without_feature':
-                    n_features -= len(self.excluded_features)
+                # The model already has the correct feature count after removal
+                n_features = model_data.get('n_features')
+                if n_features is None:
+                    # Fallback to defaults if not found
+                    if model_type == 'with_feature':
+                        n_features = 34 if 'Random' in dataset_name else 33  # Fixed: was 33/32
+                    else:
+                        n_features = (34 if 'Random' in dataset_name else 33) - len(self.excluded_features)
                 
                 # For tree models, categorical features are always 7
                 n_categorical = 7
