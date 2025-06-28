@@ -51,7 +51,7 @@ def run_sector_elastic_net_models(feature_df=None, score_df=None, base_columns=N
     
     # Load data if not provided
     if feature_df is None:
-        feature_df = load_features_data()
+        feature_df = load_features_data(model_type='linear')
     
     if score_df is None:
         score_df = load_scores_data()

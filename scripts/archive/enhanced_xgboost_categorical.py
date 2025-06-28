@@ -15,6 +15,14 @@ from optuna.samplers import TPESampler
 import warnings
 import pickle
 from pathlib import Path
+import sys
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root))
+
+# Import unified train/test split
+from src.data.train_test_split import get_or_create_split
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -130,23 +138,15 @@ def train_enhanced_xgboost_categorical(X, y, dataset_name, categorical_columns, 
         else:
             raise ValueError(f"Expected single target column, got {y.shape[1]}")
     
-    # Split data
-    # For stratification, find a categorical column without NaN values
-    stratify_col = None
-    for col in categorical_columns:
-        if col in X.columns and X[col].notna().all():
-            stratify_col = X[col]
-            print(f"  Using {col} for stratification")
-            break
-    
-    if stratify_col is None:
-        # Use target bins for stratification
-        stratify_col = pd.qcut(y, q=min(10, len(y)//10), labels=False, duplicates='drop')
-        print("  Using target quantiles for stratification")
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, stratify=stratify_col
+    # Use unified train/test split - MANDATORY for consistency
+    print("  Using unified train/test split for consistency across models...")
+    X_train, X_test, y_train, y_test = get_or_create_split(
+        X, y, test_size=test_size, random_state=random_state, 
+        stratify_column='gics_sector'  # Use sector for stratification
     )
+    print(f"  Split successful: {len(X_train)} train, {len(X_test)} test samples")
+    print(f"  Train indices sample: {list(X_train.index[:5])}")
+    print(f"  Test indices sample: {list(X_test.index[:5])}")
     
     results = {}
     

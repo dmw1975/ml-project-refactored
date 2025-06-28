@@ -16,7 +16,8 @@ project_root = Path(__file__).parent.parent.absolute()
 sys.path.append(str(project_root))
 
 from src.config import settings
-from src.data.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+from src.data.data_categorical import load_linear_models_data
+from src.data.data import add_random_feature
 from src.utils import io
 from src.pipelines.state_manager import get_state_manager
 from src.models.linear_regression import perform_stratified_split_by_sector
@@ -220,34 +221,53 @@ def train_elasticnet_models(datasets=None, use_optuna=True, n_trials=100):
     n_trials : int, default=100
         Number of Optuna trials (ignored if use_optuna=False)
     """
-    # Force reload data module to ensure latest version
+    # Use the new data loading with issuer_name indices (same as linear regression)
     import importlib
+    import src.data.data_categorical as data_cat
     import src.data as data
+    importlib.reload(data_cat)
     importlib.reload(data)
-    from src.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    from src.data.data_categorical import load_linear_models_data
+    from src.data import get_base_and_yeo_features, add_random_feature
     
-    print("Loading data...")
-    feature_df = load_features_data()
-    score_df = load_scores_data()
+    print("Loading data with issuer_name indices...")
+    feature_df, score_df = load_linear_models_data()
     
-    # Get feature sets
-    LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+    print(f"Loaded data: {feature_df.shape[0]} companies, {feature_df.shape[1]} features")
+    print(f"Index type: {type(feature_df.index)}")
+    print(f"Index name: {feature_df.index.name}")
+    
+    # Create feature sets directly to preserve index (same approach as linear regression)
+    # Identify base columns (everything except yeo-johnson transformed)
+    base_columns = [col for col in feature_df.columns if not col.startswith('yeo_joh_')]
+    LR_Base = feature_df[base_columns].copy()
+    
+    # Identify yeo columns and their corresponding categorical columns
+    yeo_prefix = 'yeo_joh_'
+    yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
+    original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
+    categorical_columns = [col for col in base_columns if col not in original_numerical_columns]
+    
+    # Create LR_Yeo with yeo-transformed numerical + categorical columns
+    complete_yeo_columns = yeo_transformed_columns + categorical_columns
+    LR_Yeo = feature_df[complete_yeo_columns].copy()
+    
+    # Store column names for reference
+    yeo_columns = yeo_transformed_columns
+    
+    # Check if categorical columns are already present
+    has_categorical = any(col.startswith('gics_') for col in LR_Base.columns)
+    
+    if has_categorical:
+        print("Categorical columns already present in features (using new metadata approach)")
+    else:
+        print("WARNING: No categorical columns found - this may cause issues with stratified splitting")
     
     # Direct feature count check before continuing
     print(f"\nDIRECT FEATURE COUNT CHECK (AFTER LOADING):")
     print(f"LR_Base column count: {len(LR_Base.columns)}")
     print(f"LR_Yeo column count: {len(LR_Yeo.columns)}")
-    
-    # If LR_Yeo has fewer features, fix it
-    if len(LR_Yeo.columns) < len(LR_Base.columns):
-        print(f"WARNING: LR_Yeo has fewer columns than expected, forcing fix...")
-        yeo_prefix = 'yeo_joh_'
-        yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
-        original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
-        categorical_columns = [col for col in LR_Base.columns if col not in original_numerical_columns]
-        complete_yeo_columns = yeo_transformed_columns + categorical_columns
-        LR_Yeo = feature_df[complete_yeo_columns].copy()
-        print(f"Fixed LR_Yeo column count: {len(LR_Yeo.columns)}")
+    print(f"Index preserved: {LR_Base.index.name == 'issuer_name'}")
     
     # Create versions with random feature
     LR_Base_random = add_random_feature(LR_Base)

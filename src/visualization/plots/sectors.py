@@ -16,12 +16,16 @@ if str(project_root) not in sys.path:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import logging
 try:
     import seaborn as sns
 except (ImportError, SyntaxError) as e:
     print(f"Warning: Could not import seaborn: {e}")
     sns = None
 from typing import Dict, Any, Optional, Union, List, Tuple
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 from src.visualization.core.interfaces import ModelData, VisualizationConfig
 from src.visualization.core.base import BaseViz, ComparativeViz
@@ -936,6 +940,215 @@ def plot_sector_metrics_table(
     return plot.plot()
 
 
+def create_dataset_specific_plots(metrics_df: pd.DataFrame, model_type: str, output_dir: Path, config: VisualizationConfig) -> Dict[str, plt.Figure]:
+    """
+    Create dataset-specific plots for sector models.
+    
+    Parameters
+    ----------
+    metrics_df : pd.DataFrame
+        DataFrame with sector metrics
+    model_type : str
+        Type of model ('elasticnet' or 'lightgbm')
+    output_dir : Path
+        Output directory for plots
+    config : VisualizationConfig
+        Visualization configuration
+        
+    Returns
+    -------
+    Dict[str, plt.Figure]
+        Dictionary of created figures
+    """
+    figures = {}
+    
+    # Get unique dataset types
+    dataset_types = []
+    if 'dataset_type' in metrics_df.columns:
+        dataset_types = metrics_df['dataset_type'].unique()
+    elif 'dataset' in metrics_df.columns:
+        dataset_types = metrics_df['dataset'].unique()
+    elif 'type' in metrics_df.columns:
+        # For both ElasticNet and LightGBM, type column might contain dataset info
+        valid_datasets = ['Base', 'Yeo', 'Base_Random', 'Yeo_Random', 'Base+Random', 'Yeo+Random']
+        dataset_types = [t for t in metrics_df['type'].unique() if t in valid_datasets]
+    
+    if len(dataset_types) == 0:
+        logger.warning(f"No dataset types found for {model_type}")
+        return figures
+    
+    # Create performance plot for each dataset type
+    for dataset_type in dataset_types:
+        logger.info(f"Creating {model_type} sector plot for {dataset_type} dataset")
+        
+        # Filter data for this dataset type
+        if 'dataset_type' in metrics_df.columns:
+            dataset_df = metrics_df[metrics_df['dataset_type'] == dataset_type]
+        elif 'dataset' in metrics_df.columns:
+            dataset_df = metrics_df[metrics_df['dataset'] == dataset_type]
+        else:
+            dataset_df = metrics_df[metrics_df['type'] == dataset_type]
+        
+        if dataset_df.empty:
+            logger.warning(f"No data found for {dataset_type} dataset")
+            continue
+        
+        # Group by sector for performance plot
+        sector_perf = dataset_df.groupby('sector').agg({
+            'RMSE': 'mean',
+            'R2': 'mean',
+            'n_companies': 'first'
+        }).reset_index()
+        
+        # Sort by RMSE
+        sector_perf = sector_perf.sort_values('RMSE')
+        
+        # Create plot
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        bars = ax.bar(sector_perf['sector'], sector_perf['RMSE'], 
+                      color='#3498db' if model_type == 'lightgbm' else '#e74c3c', alpha=0.7)
+        
+        # Add value labels
+        for bar, r2, count in zip(bars, sector_perf['R2'], sector_perf['n_companies']):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, height + 0.02,
+                    f'RMSE: {height:.4f}\nR²: {r2:.4f}\n(n={int(count)})', 
+                    ha='center', va='bottom', fontsize=10)
+        
+        ax.set_title(f'{model_type.upper()} Sector Performance - {dataset_type} Dataset', fontsize=14)
+        ax.set_ylabel('Mean RMSE (lower is better)')
+        ax.set_xlabel('Sector')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        
+        # Save figure
+        filename = f"{model_type}_sector_performance_{dataset_type.lower()}"
+        save_path = output_dir / f"{filename}.png"
+        plt.savefig(save_path, dpi=config.get('dpi', 300), bbox_inches='tight')
+        plt.close(fig)
+        
+        logger.info(f"Saved plot to: {save_path}")
+        figures[filename] = 'generated'
+    
+    return figures
+
+
+def create_metric_heatmaps(metrics_df: pd.DataFrame, model_type: str, output_dir: Path, config: VisualizationConfig) -> Dict[str, plt.Figure]:
+    """
+    Create metric-specific heatmaps for sector models.
+    
+    Parameters
+    ----------
+    metrics_df : pd.DataFrame
+        DataFrame with sector metrics
+    model_type : str
+        Type of model ('elasticnet' or 'lightgbm')
+    output_dir : Path
+        Output directory for plots
+    config : VisualizationConfig
+        Visualization configuration
+        
+    Returns
+    -------
+    Dict[str, plt.Figure]
+        Dictionary of created figures
+    """
+    figures = {}
+    
+    # Determine dataset column
+    dataset_col = None
+    if 'dataset_type' in metrics_df.columns:
+        dataset_col = 'dataset_type'
+    elif 'dataset' in metrics_df.columns:
+        dataset_col = 'dataset'
+    elif 'type' in metrics_df.columns:
+        # Check if type column contains dataset information
+        valid_datasets = ['Base', 'Yeo', 'Base_Random', 'Yeo_Random', 'Base+Random', 'Yeo+Random']
+        if any(t in metrics_df['type'].unique() for t in valid_datasets):
+            dataset_col = 'type'
+    
+    if not dataset_col:
+        logger.warning(f"No dataset column found for {model_type}")
+        return figures
+    
+    # Create heatmap for each metric
+    for metric in ['RMSE', 'MSE', 'MAE', 'R2']:
+        if metric not in metrics_df.columns:
+            logger.warning(f"Metric {metric} not found in data")
+            continue
+            
+        logger.info(f"Creating {model_type} {metric} heatmap")
+        
+        # Pivot data for heatmap
+        try:
+            pivot_df = metrics_df.pivot_table(
+                index='sector', 
+                columns=dataset_col, 
+                values=metric,
+                aggfunc='mean'
+            )
+            
+            # Sort sectors by average performance
+            if metric == 'R2':
+                # Higher is better for R2
+                sector_order = pivot_df.mean(axis=1).sort_values(ascending=False).index
+            else:
+                # Lower is better for other metrics
+                sector_order = pivot_df.mean(axis=1).sort_values().index
+            
+            pivot_df = pivot_df.reindex(sector_order)
+            
+            # Create figure
+            fig, ax = plt.subplots(figsize=(10, 8))
+            
+            # Create heatmap
+            if sns is not None:
+                cmap = 'YlGnBu_r' if metric != 'R2' else 'YlGnBu'
+                sns.heatmap(pivot_df, annot=True, fmt='.4f', cmap=cmap,
+                           linewidths=0.5, ax=ax, cbar_kws={'label': metric})
+            else:
+                # Fallback to matplotlib
+                cmap = plt.cm.YlGnBu_r if metric != 'R2' else plt.cm.YlGnBu
+                im = ax.imshow(pivot_df.values, cmap=cmap, aspect='auto')
+                
+                # Add text annotations
+                for i in range(len(pivot_df.index)):
+                    for j in range(len(pivot_df.columns)):
+                        text = ax.text(j, i, f'{pivot_df.values[i, j]:.4f}',
+                                     ha="center", va="center", color="black", fontsize=10)
+                
+                # Set ticks
+                ax.set_xticks(np.arange(len(pivot_df.columns)))
+                ax.set_yticks(np.arange(len(pivot_df.index)))
+                ax.set_xticklabels(pivot_df.columns)
+                ax.set_yticklabels(pivot_df.index)
+                
+                # Add colorbar
+                cbar = plt.colorbar(im, ax=ax)
+                cbar.set_label(metric)
+            
+            ax.set_title(f'{model_type.upper()} Sector Performance - {metric} by Dataset', fontsize=14)
+            ax.set_xlabel('Dataset Type')
+            ax.set_ylabel('Sector')
+            
+            plt.tight_layout()
+            
+            # Save figure
+            filename = f"{model_type}_sector_{metric.lower()}_heatmap"
+            save_path = output_dir / f"{filename}.png"
+            plt.savefig(save_path, dpi=config.get('dpi', 300), bbox_inches='tight')
+            plt.close(fig)
+            
+            logger.info(f"Saved plot to: {save_path}")
+            figures[filename] = 'generated'
+            
+        except Exception as e:
+            logger.error(f"Error creating {metric} heatmap: {e}")
+    
+    return figures
+
+
 def visualize_lightgbm_sector_plots(
     metrics_file: Optional[str] = None,
     output_dir: Optional[str] = None,
@@ -985,22 +1198,122 @@ def visualize_lightgbm_sector_plots(
     config.update(output_dir=output_dir)
     ensure_dir(config.get('output_dir'))
     
-    # Use the EXACT same template as linear regression - just call the working functions!
+    # Create both consolidated and dataset-specific plots
     figures = {}
     
-    # 1. Sector Performance (this creates: performance_comparison, model_type_heatmap, boxplots, vs_overall)
+    # 1. Original consolidated plots
+    logger.info("Creating consolidated LightGBM sector plots")
     perf_figures = plot_sector_performance(metrics_df, config)
     figures.update(perf_figures)
     
     # 2. Sector Metrics Table
     figures['metrics_table'] = plot_sector_metrics_table(metrics_df, config)
     
-    # 3. Train/Test Distribution (Skip for LightGBM to avoid duplication)
-    # The general stratification plot is created in the stratified folder
+    # 3. NEW: Dataset-specific performance plots
+    logger.info("Creating dataset-specific LightGBM sector plots")
+    dataset_figures = create_dataset_specific_plots(metrics_df, 'lightgbm', output_dir, config)
+    figures.update(dataset_figures)
+    
+    # 4. NEW: Metric-specific heatmaps
+    logger.info("Creating metric-specific LightGBM heatmaps")
+    heatmap_figures = create_metric_heatmaps(metrics_df, 'lightgbm', output_dir, config)
+    figures.update(heatmap_figures)
+    
+    # 5. Train/Test Distribution (Skip for LightGBM to avoid duplication)
     print("Skipping stratification plot for LightGBM (using general version in stratified folder)")
     
     print(f"Generated {len(figures)} LightGBM sector visualization plots")
     print(f"All LightGBM sector visualizations saved to {config.get('output_dir')}")
+    logger.info(f"Total LightGBM plots created: {len(figures)}")
+    return figures
+
+
+def visualize_elasticnet_sector_plots(
+    metrics_file: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    config: Optional[Union[Dict[str, Any], VisualizationConfig]] = None
+) -> Dict[str, plt.Figure]:
+    """
+    Create all sector-specific visualizations for ElasticNet models using the exact same template as LightGBM.
+    
+    Parameters
+    ----------
+    metrics_file : str, optional
+        Path to ElasticNet sector metrics CSV file. If None, uses default location.
+    output_dir : str, optional
+        Directory to save plots. If None, uses default sector output directory.
+    config : dict or VisualizationConfig, optional
+        Configuration for visualization styling and output.
+        
+    Returns
+    -------
+    Dict[str, plt.Figure]
+        Dictionary mapping plot names to figure objects.
+    """
+    # Use ElasticNet-specific file if not provided
+    if metrics_file is None:
+        metrics_file = settings.METRICS_DIR / "sector_elasticnet_metrics.csv"
+    
+    # Default output directory for ElasticNet sectors
+    if output_dir is None:
+        output_dir = settings.VISUALIZATION_DIR / "sectors" / "elasticnet"
+    
+    # Load ElasticNet metrics data
+    if not Path(metrics_file).exists():
+        print(f"ElasticNet sector metrics file not found: {metrics_file}")
+        print("Please train ElasticNet sector models first")
+        return {}
+    
+    metrics_df = pd.read_csv(metrics_file)
+    print(f"Loaded ElasticNet sector metrics: {len(metrics_df)} models across sectors")
+    
+    # Fix the 'type' column for ElasticNet data
+    # ElasticNet uses 'type' for dataset type (Base, Yeo, etc.), not model type
+    # We need to add a proper model type column
+    if 'type' in metrics_df.columns and 'ElasticNet' not in metrics_df['type'].values:
+        # Rename existing 'type' to 'dataset_type' to preserve it
+        if 'dataset_type' not in metrics_df.columns:
+            metrics_df['dataset_type'] = metrics_df['type']
+        # Set all rows to have 'ElasticNet' as the model type
+        metrics_df['type'] = 'ElasticNet'
+    
+    # Set up config exactly like the LightGBM version
+    if config is None:
+        config = VisualizationConfig()
+    elif isinstance(config, dict):
+        config = VisualizationConfig(**config)
+    
+    # Set output directory
+    config.update(output_dir=output_dir)
+    ensure_dir(config.get('output_dir'))
+    
+    # Create both consolidated and dataset-specific plots
+    figures = {}
+    
+    # 1. Original consolidated plots
+    logger.info("Creating consolidated ElasticNet sector plots")
+    perf_figures = plot_sector_performance(metrics_df, config)
+    figures.update(perf_figures)
+    
+    # 2. Sector Metrics Table
+    figures['metrics_table'] = plot_sector_metrics_table(metrics_df, config)
+    
+    # 3. NEW: Dataset-specific performance plots
+    logger.info("Creating dataset-specific ElasticNet sector plots")
+    dataset_figures = create_dataset_specific_plots(metrics_df, 'elasticnet', output_dir, config)
+    figures.update(dataset_figures)
+    
+    # 4. NEW: Metric-specific heatmaps
+    logger.info("Creating metric-specific ElasticNet heatmaps")
+    heatmap_figures = create_metric_heatmaps(metrics_df, 'elasticnet', output_dir, config)
+    figures.update(heatmap_figures)
+    
+    # 5. Train/Test Distribution (Skip for ElasticNet to avoid duplication)
+    print("Skipping stratification plot for ElasticNet (using general version in stratified folder)")
+    
+    print(f"Generated {len(figures)} ElasticNet sector visualization plots")
+    print(f"All ElasticNet sector visualizations saved to {config.get('output_dir')}")
+    logger.info(f"Total ElasticNet plots created: {len(figures)}")
     return figures
 
 
@@ -1051,5 +1364,185 @@ def visualize_all_sector_plots(
     except Exception as e:
         print(f"Error creating train/test distribution plot: {e}")
     
+    # 4. ElasticNet-specific visualizations
+    elasticnet_metrics_file = settings.METRICS_DIR / "sector_models_metrics.csv"
+    if elasticnet_metrics_file.exists():
+        try:
+            logger.info("Creating ElasticNet sector visualizations...")
+            elasticnet_figures = visualize_elasticnet_sector_plots()
+            figures.update({f'elasticnet_{k}': v for k, v in elasticnet_figures.items()})
+        except Exception as e:
+            logger.error(f"Error creating ElasticNet sector visualizations: {e}")
+            print(f"Error creating ElasticNet sector visualizations: {e}")
+    
+    # 5. LightGBM-specific visualizations
+    lightgbm_metrics_file = settings.METRICS_DIR / "sector_lightgbm_metrics.csv"
+    if lightgbm_metrics_file.exists():
+        try:
+            logger.info("Creating LightGBM sector visualizations...")
+            lightgbm_figures = visualize_lightgbm_sector_plots()
+            figures.update({f'lightgbm_{k}': v for k, v in lightgbm_figures.items()})
+        except Exception as e:
+            logger.error(f"Error creating LightGBM sector visualizations: {e}")
+            print(f"Error creating LightGBM sector visualizations: {e}")
+    
     print(f"All sector visualizations saved to {config.get('output_dir')}")
     return figures
+
+
+def create_cv_stratification_quality_plot(output_dir=None, n_folds=5):
+    """
+    Create cross-validation stratification quality plot showing sector distribution across CV folds.
+    
+    This visualization helps assess whether stratified k-fold maintains consistent
+    sector distributions across all folds, which is crucial for reliable CV scores.
+    
+    Args:
+        output_dir: Directory to save the plot. If None, uses stratified folder.
+        n_folds: Number of CV folds (default: 5)
+        
+    Returns:
+        bool: True if successful
+    """
+    try:
+        from sklearn.model_selection import StratifiedKFold
+        from src.data.data_categorical import load_tree_models_data
+        
+        # Use stratified folder as default output directory
+        if output_dir is None:
+            output_dir = settings.VISUALIZATION_DIR / "stratified"
+            ensure_dir(output_dir)
+        
+        # Load the data
+        print("Loading data for CV stratification quality analysis...")
+        X, y = load_tree_models_data()
+        
+        if 'gics_sector' not in X.columns:
+            print("Error: gics_sector column not found in data")
+            return False
+        
+        # Get overall sector distribution
+        overall_dist = X['gics_sector'].value_counts(normalize=True).sort_index()
+        sectors = list(overall_dist.index)
+        n_sectors = len(sectors)
+        
+        # Prepare stratified k-fold
+        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+        
+        # Analyze each fold
+        stratification_check = []
+        for fold_idx, (train_idx, test_idx) in enumerate(skf.split(X, X['gics_sector'])):
+            X_train_fold = X.iloc[train_idx]
+            X_test_fold = X.iloc[test_idx]
+            
+            # Calculate distributions
+            train_dist = X_train_fold['gics_sector'].value_counts(normalize=True).sort_index()
+            test_dist = X_test_fold['gics_sector'].value_counts(normalize=True).sort_index()
+            
+            # Calculate differences
+            diffs = {}
+            for sector in sectors:
+                train_pct = train_dist.get(sector, 0) * 100
+                test_pct = test_dist.get(sector, 0) * 100
+                diffs[sector] = abs(train_pct - test_pct)
+            
+            stratification_check.append({
+                'fold': fold_idx + 1,
+                'train_dist': train_dist,
+                'test_dist': test_dist,
+                'differences': diffs,
+                'max_diff': max(diffs.values())
+            })
+        
+        # Create DataFrame for analysis
+        stratification_df = pd.DataFrame([
+            {
+                'Fold': s['fold'],
+                'Max_Diff_%': s['max_diff'],
+                'Quality': 'Excellent' if s['max_diff'] < 2 else 'Good' if s['max_diff'] < 5 else 'Fair'
+            }
+            for s in stratification_check
+        ])
+        
+        # Create visualization
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+        
+        # Plot 1: Sector distribution across folds
+        fold_data = np.zeros((n_folds, n_sectors))
+        
+        for i, strat in enumerate(stratification_check):
+            for j, sector in enumerate(sectors):
+                fold_data[i, j] = strat['test_dist'].get(sector, 0) * 100
+        
+        # Create grouped bar chart
+        x = np.arange(n_sectors)
+        width = 0.15
+        colors = plt.cm.Set3(np.linspace(0, 1, n_folds))
+        
+        for i in range(n_folds):
+            ax1.bar(x + i*width, fold_data[i], width, label=f'Fold {i+1}', color=colors[i])
+        
+        ax1.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+        ax1.set_xlabel('GICS Sector', fontsize=12)
+        ax1.set_ylabel('Percentage (%)', fontsize=12)
+        ax1.set_title('Test Set Sector Distribution Across CV Folds', fontsize=14, fontweight='bold')
+        ax1.set_xticks(x + width * (n_folds-1) / 2)
+        ax1.set_xticklabels(sectors, rotation=45, ha='right')
+        ax1.legend(fontsize=10, loc='upper right')
+        ax1.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Plot 2: Maximum differences per fold
+        bars = ax2.bar(stratification_df['Fold'], stratification_df['Max_Diff_%'], 
+                       color='coral', alpha=0.7, edgecolor='darkred', linewidth=1.5)
+        
+        # Add value labels on bars
+        for bar in bars:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                    f'{height:.2f}%', ha='center', va='bottom', fontsize=10)
+        
+        ax2.axhline(y=2.0, color='green', linestyle='--', label='Excellent (<2%)', linewidth=2)
+        ax2.axhline(y=5.0, color='orange', linestyle='--', label='Good (<5%)', linewidth=2)
+        ax2.set_xlabel('Fold', fontsize=12)
+        ax2.set_ylabel('Max Difference (%)', fontsize=12)
+        ax2.set_title('Maximum Train-Test Distribution Difference per Fold', fontsize=14, fontweight='bold')
+        ax2.set_xticks(range(1, n_folds + 1))
+        ax2.legend(fontsize=10)
+        ax2.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Set y-axis limits
+        ax2.set_ylim(0, max(stratification_df['Max_Diff_%'].max() * 1.2, 6))
+        
+        # Add overall quality assessment
+        avg_max_diff = stratification_df['Max_Diff_%'].mean()
+        overall_quality = 'EXCELLENT' if avg_max_diff < 2 else 'GOOD' if avg_max_diff < 5 else 'FAIR'
+        
+        fig.suptitle(f'Cross-Validation Stratification Quality Analysis ({n_folds}-Fold CV)\n'
+                     f'Overall Quality: {overall_quality} (Avg Max Difference: {avg_max_diff:.2f}%)',
+                     fontsize=16, fontweight='bold')
+        
+        plt.tight_layout()
+        
+        # Save the plot
+        plot_path = Path(output_dir) / "sector_cv_stratification_quality.png"
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Created CV stratification quality plot: {plot_path}")
+        
+        # Print summary statistics
+        print(f"\nCV Stratification Summary:")
+        print(f"{'='*50}")
+        print(f"Average max difference: {avg_max_diff:.2f}%")
+        print(f"Overall quality: {overall_quality}")
+        print(f"\nPer-fold statistics:")
+        for _, row in stratification_df.iterrows():
+            print(f"  Fold {row['Fold']}: Max diff = {row['Max_Diff_%']:.2f}% ({row['Quality']})")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error creating CV stratification quality plot: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

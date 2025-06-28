@@ -93,8 +93,9 @@ def analyze_feature_importance(all_models=None):
         return
     
     # Load original data to get feature sets
-    feature_df = load_features_data()
-    score_df = load_scores_data()
+    # Use the new data loading that preserves issuer_name indices
+    from src.data.data_categorical import load_linear_models_data
+    feature_df, score_df = load_linear_models_data()
     
     # Dictionary to store the feature sets used during training
     trained_feature_sets = {}
@@ -216,7 +217,21 @@ def analyze_feature_importance(all_models=None):
                     continue  # Skip this model
             else:
                 # Extract just the test set with the correct features
-                X_test = feature_df.loc[test_indices, feature_names]
+                # Handle both integer and string indices
+                if len(test_indices) > 0 and isinstance(test_indices[0], (int, np.integer)):
+                    # Integer indices - use iloc
+                    print(f"Using integer indices for {model_name}")
+                    # First, get the positions of the required features
+                    feature_positions = [feature_df.columns.get_loc(f) for f in feature_names if f in feature_df.columns]
+                    # Filter test_indices to only include valid indices
+                    valid_indices = [idx for idx in test_indices if 0 <= idx < len(feature_df)]
+                    X_test = feature_df.iloc[valid_indices, feature_positions]
+                    # Reset column names to match feature_names
+                    X_test.columns = [f for f in feature_names if f in feature_df.columns]
+                else:
+                    # String indices (company names) - use loc
+                    print(f"Using company name indices for {model_name}")
+                    X_test = feature_df.loc[test_indices, feature_names]
         else:
             print(f"No feature information available for model {model_name}, skipping")
             continue  # Skip this model

@@ -51,7 +51,7 @@ def run_sector_models(feature_df=None, score_df=None, base_columns=None, yeo_col
     
     # Load data if not provided
     if feature_df is None:
-        feature_df = load_features_data()
+        feature_df = load_features_data(model_type='linear')
     
     if score_df is None:
         score_df = load_scores_data()
@@ -409,7 +409,7 @@ def analyze_sector_importance(sector_models=None, n_repeats=10):
             y_test = model_data['y_test']
             
             # Load full dataset to get feature columns
-            feature_df = load_features_data()
+            feature_df = load_features_data(model_type='linear')
             
             # Get sector mask
             sector_col = f'gics_sector_{sector}'

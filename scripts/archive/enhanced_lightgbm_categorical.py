@@ -16,6 +16,14 @@ import warnings
 import pickle
 from pathlib import Path
 import re
+import sys
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root))
+
+# Import unified train/test split
+from src.data.train_test_split import get_or_create_split
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -174,23 +182,19 @@ def train_enhanced_lightgbm_categorical(X, y, dataset_name, categorical_columns,
         for original_col in name_mapping.values() if name_mapping.get(col) == original_col
     )]
     
-    # Split data
-    # For stratification, find a categorical column without NaN values
-    stratify_col = None
-    for col in cat_columns_clean:
-        if col in X_clean.columns and X_clean[col].notna().all():
-            stratify_col = X_clean[col]
-            print(f"  Using {col} for stratification")
-            break
-    
-    if stratify_col is None:
-        # Use target bins for stratification
-        stratify_col = pd.qcut(y, q=min(10, len(y)//10), labels=False, duplicates='drop')
-        print("  Using target quantiles for stratification")
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_clean, y, test_size=test_size, random_state=random_state, stratify=stratify_col
+    # Use unified train/test split - MANDATORY for consistency
+    print("  Using unified train/test split for consistency across models...")
+    X_train_orig, X_test_orig, y_train, y_test = get_or_create_split(
+        X, y, test_size=test_size, random_state=random_state, 
+        stratify_column='gics_sector'  # Use sector for stratification
     )
+    print(f"  Split successful: {len(X_train_orig)} train, {len(X_test_orig)} test samples")
+    print(f"  Train indices sample: {list(X_train_orig.index[:5])}")
+    print(f"  Test indices sample: {list(X_test_orig.index[:5])}")
+    
+    # Now clean the feature names after splitting
+    X_train, _ = clean_feature_names(X_train_orig)
+    X_test, _ = clean_feature_names(X_test_orig)
     
     # Get categorical indices
     cat_indices = [i for i, col in enumerate(X_clean.columns) if col in cat_columns_clean]

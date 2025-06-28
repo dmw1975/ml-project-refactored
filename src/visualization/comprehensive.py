@@ -372,6 +372,30 @@ def create_comprehensive_visualizations(models: Optional[Dict[str, Any]] = None,
             except Exception as e:
                 log_viz_step("SECTOR_PLOTS", f"Error creating LightGBM sector plots: {e}", is_error=True)
         
+        # ElasticNet sector models
+        elasticnet_sector_metrics_path = METRICS_DIR / "sector_elasticnet_metrics.csv"
+        if elasticnet_sector_metrics_path.exists():
+            log_viz_step("SECTOR_PLOTS", "Creating ElasticNet sector visualizations...")
+            from ..visualization.plots.sectors import visualize_elasticnet_sector_plots
+            
+            try:
+                elasticnet_figures = visualize_elasticnet_sector_plots()
+                if elasticnet_figures:
+                    # Convert figure dict to paths
+                    elasticnet_paths = []
+                    for name, fig in elasticnet_figures.items():
+                        if isinstance(fig, str) and fig == 'generated':
+                            # Already saved, add to paths
+                            elasticnet_paths.append(name)
+                        elif hasattr(fig, 'savefig'):
+                            # It's a figure object, should already be saved
+                            elasticnet_paths.append(name)
+                    
+                    sector_paths.extend(elasticnet_paths)
+                    log_viz_step("SECTOR_PLOTS", f"Created {len(elasticnet_paths)} ElasticNet sector plots")
+            except Exception as e:
+                log_viz_step("SECTOR_PLOTS", f"Error creating ElasticNet sector plots: {e}", is_error=True)
+        
         if not sector_paths:
             log_viz_step("SECTOR_PLOTS", "No sector metrics found - run sector evaluation first")
         

@@ -58,6 +58,13 @@ class FeatureImportancePlot(ModelViz):
         # Determine number of features to show
         top_n = self.config.get('top_n', 15)
         
+        # Safety limit: never show more than 50 features to avoid massive plots
+        # This is especially important for ElasticNet models with many zero coefficients
+        max_features = 50
+        if top_n > max_features:
+            print(f"Warning: Limiting features from {top_n} to {max_features} for readability")
+            top_n = max_features
+        
         # Select top features
         top_features = importance_df.head(top_n)
         
@@ -517,13 +524,16 @@ def create_cross_model_feature_importance():
         # Generate individual plots
         for model_name, model_data in models.items():
             try:
+                # Use top 20 for ElasticNet models to ensure manageable plot size
+                top_n = 20 if model_type == 'elasticnet' else 15
+                
                 config = VisualizationConfig(
                     output_dir=output_dir,
                     save=True,
                     show=False,
                     format='png',
                     dpi=300,
-                    top_n=15,
+                    top_n=top_n,
                     show_error=True,
                     show_values=True,
                     grid=True,

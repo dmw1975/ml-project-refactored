@@ -13,6 +13,7 @@ from typing import Tuple, List
 from sklearn.model_selection import train_test_split
 
 from src.config import settings
+from src.data.data import load_scores_data
 
 
 def load_tree_models_from_csv() -> Tuple[pd.DataFrame, pd.Series, List[str]]:
@@ -44,8 +45,10 @@ def load_tree_models_from_csv() -> Tuple[pd.DataFrame, pd.Series, List[str]]:
         df = df.set_index('issuer_name')
     
     # Ensure scores has issuer_name as index
-    if scores.index.name != 'issuer_name' and 'issuer_name' in scores.columns:
-        scores = scores.set_index('issuer_name')
+    if scores.index.name != 'issuer_name':
+        # If scores is a Series, it doesn't have columns
+        if hasattr(scores, 'index') and hasattr(scores.index, 'name'):
+            scores.index.name = 'issuer_name'
     
     # Get common indices
     common_indices = df.index.intersection(scores.index)

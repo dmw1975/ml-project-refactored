@@ -7,6 +7,7 @@
 # - Archives and backups
 # - Large data files
 # - Virtual environments
+# - Claude-specific documentation
 # ==============================================================================
 
 # ==============================================================================
@@ -64,29 +65,14 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -97,16 +83,13 @@ profile_default/
 ipython_config.py
 
 # pyenv
-# .python-version
+.python-version
 
 # pipenv
-#Pipfile.lock
-
-# UV
-#uv.lock
+Pipfile.lock
 
 # poetry
-#poetry.lock
+poetry.lock
 
 # pdm
 .pdm.toml
@@ -115,32 +98,6 @@ ipython_config.py
 
 # PEP 582
 __pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
 
 # mypy
 .mypy_cache/
@@ -156,14 +113,8 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-#.idea/
-
 # Ruff
 .ruff_cache/
-
-# PyPI configuration file
-.pypirc
 
 # ==============================================================================
 # Project-Specific Exclusions
@@ -174,34 +125,15 @@ cython_debug/
 outputs/
 test_outputs/
 
-# Archived outputs from previous runs (timestamped folders)
+# Archived outputs from previous runs
 outputs_pre_amendment_*/
 outputs_backup_*/
-outputs_old_*/
-outputs_v*/
-
-# === CACHE AND TEMPORARY FILES ===
-# CatBoost training cache and temporary files
-catboost_info/
-
-# Log files and directories
-logs/
-*.log
-
-# Temporary files
-*.tmp
-*.temp
-*~
-.DS_Store
 
 # === DATA FOLDERS ===
-# Raw and processed data (can be large)
-# Comment out if you need to version control small reference datasets
-data/raw/*.csv
-data/processed/*.csv
-data/interim/
-data/pkl/*.pkl
+# Exclude all data files to avoid large uploads
+data/
 
+# === MODELS AND LARGE FILES ===
 # Large model files
 *.pkl
 *.pickle
@@ -213,20 +145,36 @@ data/pkl/*.pkl
 *.onnx
 *.pb
 *.tflite
+*.safetensors
 
 # === ARCHIVES AND BACKUPS ===
 # All archive and backup folders
+archive/
 archive_*/
 backup_*/
-*_backup_*/
-*_archive_*/
+*_backup*/
+*_archive*/
 docs_backup_*/
 
-# Old versions and deprecated content
-old/
-deprecated/
-*_old/
-*_deprecated/
+# Essential backup directory
+archive_essential_backup_*/
+archive_full_backup_*/
+
+# === LOGS AND TEMPORARY FILES ===
+# Log files and directories
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# === CACHE FILES ===
+# CatBoost training cache
+catboost_info/
 
 # === IDE AND EDITOR SETTINGS ===
 # VS Code
@@ -239,23 +187,56 @@ deprecated/
 # JetBrains IDEs
 .idea/
 
-# === TEMPORARY AND DEBUG SCRIPTS ===
-# Shell scripts for comparing versions
-compare_amendments_*.sh
-verify_clean_*.sh
-validate_pipeline_outputs.sh
+# === DOCUMENTATION ===
+# Claude-specific documentation (as requested)
+CLAUDE.md
+README-CLAUDE.md
 
-# Temporary Python scripts in root directory
-debug_*.py
+# Cleanup and analysis reports
+CLEANUP_FINAL_REPORT.md
+*_SUMMARY.md
+*_ANALYSIS.md
+*_FIX_*.md
+REPOSITORY_HOUSECLEANING_ANALYSIS.md
+DOCUMENTATION.md
+INTEGRATION_NOTES.md
+README_old.md
+
+# Movement and strategy documents
+file_movement_plan.md
+archive_strategy.md
+prompt_template.md
+repo_structure.md
+repository_cleanup_comprehensive_readme.md
+PROJECT_INVENTORY.md
+
+# === TEMPORARY AND DEBUG SCRIPTS ===
+# Test and debug scripts
 test_*.py
-generate_*.py
+debug_*.py
 fix_*.py
-run_pipeline_safe.py
-direct_run.py
-*_test.py
-*_debug.py
-*_temp.py
-*_tmp.py
+generate_*.py
+validate_*.py
+diagnose_*.py
+check_*.py
+verify_*.py
+
+# Planning and working documents
+plan*.md
+
+# Temporary verification scripts
+verify_clean_*.sh
+
+# Diagnostic scripts folder
+diagnostics/
+
+# Feature removal scripts
+xgboost_feature_removal_*.py
+!xgboost_feature_removal_proper.py  # Keep the proper version
+
+# Archive scripts
+archive_before_amendments.py
+!archive_before_amendments_safe.py  # Keep the safe version
 
 # === MISCELLANEOUS ===
 # Accidental token leaks or credentials
@@ -263,84 +244,58 @@ ghp_*/
 *_token*
 *_key*
 *_secret*
+*.pem
+*.key
 
-# Empty directories that serve no purpose
-linreg_eval_metrics/
+# Empty directories
 configs/
 
 # Symbolic links
 esg_ml_clean_link
 
-# === DOCUMENTATION ===
-# Keep main docs but exclude backups
-!docs/
-docs_backup_*/
-docs_old_*/
+# Feature removal analysis folders
+feature_removal_analysis_*/
 
-# === LARGE BINARY FILES ===
-# Images and plots (keep only essential ones in docs)
+# Temporary JSON fixes
+fixed_linear_model_columns.json
+
+# Update scripts (should be integrated into main.py)
+update_*.py
+
+# Documentation folder (supplementary docs)
+docs/
+
+# === IMAGES AND PLOTS ===
+# Exclude all images (they're generated outputs)
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.svg
-# Allow images in docs folder
-!docs/**/*.png
-!docs/**/*.jpg
-!docs/**/*.svg
+*.pdf
 
-# === REPORTS AND SUMMARIES ===
-# Temporary analysis reports (keep only essential ones)
-*_SUMMARY.md
-*_ANALYSIS.md
-*_FIX_*.md
-# Keep main documentation files
+# ==============================================================================
+# Files to Keep (exceptions to patterns above)
+# ==============================================================================
+
+# Keep essential files
 !README.md
-!DOCUMENTATION.md
-!CLAUDE.md
-
-# ==============================================================================
-# Exceptions (files to keep despite patterns above)
-# ==============================================================================
-
-# Keep requirements and setup files
 !requirements.txt
-!setup.py
-!pyproject.toml
-
-# Keep main configuration files
+!main.py
 !.gitignore
-!.gitattributes
+!.gitignore.backup
 
-# Keep CI/CD configurations
-!.github/
-!.gitlab-ci.yml
-!.travis.yml
-
-# Keep main source code
+# Keep source code
 !src/
 
-# Keep essential scripts
+# Keep essential scripts directory structure
 !scripts/
-# But exclude temporary scripts within scripts
+# But exclude archives within scripts
 scripts/archive/
-scripts/utilities/test_*.py
-scripts/utilities/debug_*.py
-scripts/utilities/fix_*.py
-scripts/utilities/generate_*.py
+
+# Keep test directory structure
+!tests/
 
 # ==============================================================================
 # End of .gitignore
 # ==============================================================================
-# Local archive directory (not for GitHub)
-archive/
-
-
-# Cleanup files
-all_python_files.txt
-perform_cleanup.py
-cleanup_analysis.md
-CLEANUP_EXECUTION_PLAN.md
-INTEGRATION_NOTES.md
-README_old.md
-

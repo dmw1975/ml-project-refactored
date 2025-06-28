@@ -82,8 +82,6 @@ def parse_args():
     parser = argparse.ArgumentParser(description='ML model training and evaluation')
     parser.add_argument('--train', action='store_true', help='Train models')
     parser.add_argument('--train-linear', action='store_true', help='Train linear regression models')
-    parser.add_argument('--train-linear-elasticnet', action='store_true', 
-                        help='Train linear models with optimal ElasticNet parameters')
     parser.add_argument('--optimize-elasticnet', type=int, metavar='N',
                         help='Optimize ElasticNet with Optuna using N trials (default: 100)')
     parser.add_argument('--elasticnet-grid', action='store_true',
@@ -269,6 +267,13 @@ def main():
                 # Don't set should_retrain_all to False - we'll check each individually
         
         if args.all or args.train or args.train_linear:
+            print("\n" + "="*60)
+            print("⚠️  WARNING: Linear models are currently affected by")
+            print("   pre-normalized input data from esg-score-data repo.")
+            print("   This causes poor performance (negative R² values).")
+            print("   Tree models (XGBoost, LightGBM, CatBoost) still work well.")
+            print("="*60)
+            
             if should_retrain_all or not args.all or should_retrain_by_type.get('linear_regression', True):
                 print("\nTraining linear regression models...")
                 step_start = time.time()
@@ -303,13 +308,13 @@ def main():
                 print("\n⏭️  Skipping XGBoost training - using existing models")
                 step_times["XGBoost Training"] = 0
         
-        if args.train_linear_elasticnet:
-            print("\nTraining linear models with optimal ElasticNet parameters...")
-            from src.models.linear_regression import train_linear_with_elasticnet_params
-            linear_elasticnet_models = train_linear_with_elasticnet_params()
-        
         if args.all or args.train:  # Make sure this matches your args
             if should_retrain_all or not args.all or should_retrain_by_type.get('elasticnet', True):
+                print("\n" + "="*60)
+                print("⚠️  WARNING: ElasticNet models are also affected by")
+                print("   pre-normalized input data. All variants may converge")
+                print("   to similar solutions due to data standardization.")
+                print("="*60)
                 print("\nTraining ElasticNet models...")
                 step_start = time.time()
                 from src.models.elastic_net import train_elasticnet_models
@@ -941,9 +946,9 @@ def main():
         lightgbm_metrics_file = settings.METRICS_DIR / "sector_lightgbm_metrics.csv"
         if lightgbm_metrics_file.exists():
             try:
-                # Use the dedicated LightGBM sector visualization script
-                from create_lightgbm_sector_visualizations import main as create_lightgbm_visualizations
-                create_lightgbm_visualizations()
+                # Use the new visualization architecture for sector plots
+                import src.visualization as viz
+                viz.visualize_all_sector_plots()
                 print("LightGBM sector visualizations completed.")
             except Exception as e:
                 print(f"Error generating LightGBM sector visualizations: {e}")
@@ -959,12 +964,6 @@ def main():
             from src.models.sector_elastic_net_models import run_sector_elastic_net_models
             sector_elasticnet_models = run_sector_elastic_net_models()
             print("ElasticNet sector models training completed.")
-            
-            # Generate ElasticNet sector visualizations
-            print("\nGenerating ElasticNet sector visualizations...")
-            from create_elasticnet_sector_visualizations import main as create_elasticnet_visualizations
-            create_elasticnet_visualizations()
-            print("ElasticNet sector visualizations completed.")
         except Exception as e:
             print(f"Error training ElasticNet sector models: {e}")
             import traceback
@@ -1027,6 +1026,11 @@ def run_additional_visualizations(args, step_times, use_state_manager=False, sta
         print("\nGenerating sector stratification plots...")
         from scripts.utilities.create_sector_stratification_plot import create_sector_stratification_plot
         create_sector_stratification_plot()
+        
+        # Add CV stratification quality plot
+        print("\nGenerating CV stratification quality plot...")
+        from src.visualization.plots.sectors import create_cv_stratification_quality_plot
+        create_cv_stratification_quality_plot()
         
         # Add SHAP visualizations
         try:

@@ -72,8 +72,14 @@ class CVDistributionPlot(ComparativeViz):
                 cv_scores = raw_data['cv_scores']
                 # Check if these are already RMSE or need conversion from MSE
                 if isinstance(cv_scores, (list, np.ndarray)) and len(cv_scores) > 0:
-                    # For tree models, cv_scores are already RMSE values
-                    rmse_scores = np.array(cv_scores)
+                    # ElasticNet stores MSE values, tree models store RMSE values
+                    model_type = adapter.get_model_type()
+                    if model_type == 'ElasticNet':
+                        # Convert MSE to RMSE for ElasticNet
+                        rmse_scores = np.sqrt(np.array(cv_scores))
+                    else:
+                        # For tree models, cv_scores are already RMSE values
+                        rmse_scores = np.array(cv_scores)
             elif 'cv_mse' in raw_data and raw_data['cv_mse'] is not None:
                 # Convert MSE to RMSE
                 rmse_scores = np.sqrt(np.array(raw_data['cv_mse']))
@@ -83,7 +89,14 @@ class CVDistributionPlot(ComparativeViz):
             if hasattr(model.data, 'cv_scores') and model.data.cv_scores is not None:
                 cv_scores = model.data.cv_scores
                 if isinstance(cv_scores, (list, np.ndarray)) and len(cv_scores) > 0:
-                    rmse_scores = np.array(cv_scores)
+                    # Check model type for proper conversion
+                    model_type = adapter.get_model_type()
+                    if model_type == 'ElasticNet':
+                        # Convert MSE to RMSE for ElasticNet
+                        rmse_scores = np.sqrt(np.array(cv_scores))
+                    else:
+                        # For tree models, cv_scores are already RMSE values
+                        rmse_scores = np.array(cv_scores)
             
             # Try adapter's cv_mse attribute if available
             elif hasattr(model.data, 'cv_mse') and model.data.cv_mse is not None:

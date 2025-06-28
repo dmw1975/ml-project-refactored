@@ -399,7 +399,7 @@ def _run_comprehensive_baseline_evaluation(all_models, output_path, min_val, max
         
         # Get y_train for baseline calculations
         y_train = model_data.get('y_train')
-        if y_train is None and (include_mean or include_median):
+        if (y_train is None or (isinstance(y_train, np.ndarray) and y_train.size == 0)) and (include_mean or include_median):
             print(f"WARNING: {model_name} missing y_train - will skip mean/median baselines")
             models_missing_ytrain.append(model_name)
         
@@ -420,6 +420,14 @@ def _run_comprehensive_baseline_evaluation(all_models, output_path, min_val, max
         
         # Calculate model RMSE once
         model_rmse = np.sqrt(mean_squared_error(y_test_values, y_pred_values))
+        
+        # Initialize y_train_values
+        y_train_values = None
+        if y_train is not None and not (isinstance(y_train, np.ndarray) and y_train.size == 0):
+            if isinstance(y_train, pd.Series) or isinstance(y_train, pd.DataFrame):
+                y_train_values = y_train.values.flatten()
+            else:
+                y_train_values = np.array(y_train).flatten()
         
         # 1. RANDOM baseline - uses test data range
         random_baseline = generate_random_baseline(
@@ -446,11 +454,7 @@ def _run_comprehensive_baseline_evaluation(all_models, output_path, min_val, max
         all_comparisons.append(random_result)
         
         # 2. MEAN baseline - uses TRAINING data
-        if include_mean and y_train is not None:
-            if isinstance(y_train, pd.Series) or isinstance(y_train, pd.DataFrame):
-                y_train_values = y_train.values.flatten()
-            else:
-                y_train_values = np.array(y_train).flatten()
+        if include_mean and y_train_values is not None:
                 
             mean_val, _ = generate_mean_baseline(y_train_values)
             mean_baseline = np.full(len(y_test_values), mean_val)
@@ -472,11 +476,7 @@ def _run_comprehensive_baseline_evaluation(all_models, output_path, min_val, max
             all_comparisons.append(mean_result)
         
         # 3. MEDIAN baseline - uses TRAINING data
-        if include_median and y_train is not None:
-            if isinstance(y_train, pd.Series) or isinstance(y_train, pd.DataFrame):
-                y_train_values = y_train.values.flatten()
-            else:
-                y_train_values = np.array(y_train).flatten()
+        if include_median and y_train_values is not None:
                 
             median_val, _ = generate_median_baseline(y_train_values)
             median_baseline = np.full(len(y_test_values), median_val)
@@ -689,7 +689,7 @@ def run_baseline_evaluation(all_models, output_path=None, min_val=0, max_val=10,
         
         # Extract training values if available for mean/median calculation
         y_train = model_data.get('y_train', None)
-        if y_train is None and (include_mean or include_median):
+        if (y_train is None or (isinstance(y_train, np.ndarray) and y_train.size == 0)) and (include_mean or include_median):
             print(f"Warning: No training data found for model {model_name}, will use test data for mean/median baselines.")
             y_train = y_test
         
@@ -706,7 +706,8 @@ def run_baseline_evaluation(all_models, output_path=None, min_val=0, max_val=10,
             y_pred_values = np.array(y_pred).flatten()
         
         # Ensure y_train is numpy array (if available)
-        if y_train is not None:
+        y_train_values = None
+        if not (y_train is None or (isinstance(y_train, np.ndarray) and y_train.size == 0)):
             if isinstance(y_train, pd.Series) or isinstance(y_train, pd.DataFrame):
                 y_train_values = y_train.values.flatten()
             else:
@@ -729,7 +730,7 @@ def run_baseline_evaluation(all_models, output_path=None, min_val=0, max_val=10,
         baseline_comparisons[f"{model_name}_random"] = random_comparison
         
         # Generate mean baseline predictions if requested
-        if include_mean and y_train is not None:
+        if include_mean and y_train_values is not None:
             # Generate mean baseline
             mean_value, _ = generate_mean_baseline(y_train_values)
             mean_preds = np.full(len(y_test_values), mean_value)
@@ -748,7 +749,7 @@ def run_baseline_evaluation(all_models, output_path=None, min_val=0, max_val=10,
             baseline_comparisons[f"{model_name}_mean"] = mean_comparison
         
         # Generate median baseline predictions if requested
-        if include_median and y_train is not None:
+        if include_median and y_train_values is not None:
             # Generate median baseline
             median_value, _ = generate_median_baseline(y_train_values)
             median_preds = np.full(len(y_test_values), median_value)

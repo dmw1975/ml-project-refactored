@@ -51,7 +51,7 @@ def run_sector_lightgbm_models(feature_df=None, score_df=None, base_columns=None
     
     # Load data if not provided
     if feature_df is None:
-        feature_df = load_features_data()
+        feature_df = load_features_data(model_type='tree')
     
     if score_df is None:
         score_df = load_scores_data()
@@ -103,8 +103,17 @@ def run_sector_lightgbm_models(feature_df=None, score_df=None, base_columns=None
     # Initialize dictionary to store model metrics
     sector_model_results = {}
     
-    # Identify sector columns
-    sector_columns = [col for col in feature_df.columns if col.startswith('gics_sector_')]
+    # Check if we have categorical gics_sector column (tree models) or one-hot encoded (linear models)
+    if 'gics_sector' in feature_df.columns:
+        # Tree model data with categorical sector column
+        print("\nUsing categorical gics_sector column for tree model data")
+        unique_sectors = feature_df['gics_sector'].unique()
+        sector_mapping = [(sector, sector) for sector in unique_sectors if pd.notna(sector)]
+    else:
+        # Linear model data with one-hot encoded sectors
+        print("\nUsing one-hot encoded sector columns")
+        sector_columns = [col for col in feature_df.columns if col.startswith('gics_sector_')]
+        sector_mapping = [(col, col.replace('gics_sector_', '')) for col in sector_columns]
     
     # Define minimum companies needed per sector for modeling
     MIN_COMPANIES = 50
@@ -114,10 +123,15 @@ def run_sector_lightgbm_models(feature_df=None, score_df=None, base_columns=None
     print("="*65)
     
     # For each sector, create and evaluate models
-    for sector_col in sector_columns:
-        sector_name = sector_col.replace('gics_sector_', '')
+    for sector_identifier, sector_name in sector_mapping:
         # Filter for companies in this sector
-        sector_mask = feature_df[sector_col] == 1
+        if 'gics_sector' in feature_df.columns:
+            # Categorical column
+            sector_mask = feature_df['gics_sector'] == sector_identifier
+        else:
+            # One-hot encoded column
+            sector_mask = feature_df[sector_identifier] == 1
+        
         X_sector = feature_df[sector_mask]
         y_sector = score_df[sector_mask]
         
@@ -130,13 +144,46 @@ def run_sector_lightgbm_models(feature_df=None, score_df=None, base_columns=None
         print("-" * 50)
         
         # Create feature sets for this sector
-        X_sector_base = X_sector[base_columns]
-        X_sector_yeo = X_sector[yeo_columns]
+        # For tree models, we need to exclude categorical columns
+        if 'gics_sector' in X_sector.columns:
+            # Filter out all object (categorical) columns for LightGBM
+            numeric_base_cols = []
+            numeric_yeo_cols = []
+            
+            for col in base_columns:
+                if col in X_sector.columns and X_sector[col].dtype in ['int64', 'float64', 'bool']:
+                    numeric_base_cols.append(col)
+                    
+            for col in yeo_columns:
+                if col in X_sector.columns and X_sector[col].dtype in ['int64', 'float64', 'bool']:
+                    numeric_yeo_cols.append(col)
+                    
+            X_sector_base = X_sector[numeric_base_cols]
+            X_sector_yeo = X_sector[numeric_yeo_cols]
+            
+            # Update base_columns and yeo_columns for this iteration
+            base_columns_sector = numeric_base_cols
+            yeo_columns_sector = numeric_yeo_cols
+        else:
+            X_sector_base = X_sector[base_columns]
+            X_sector_yeo = X_sector[yeo_columns]
+            base_columns_sector = base_columns
+            yeo_columns_sector = yeo_columns
         
         # Filter random datasets by the same sector indices
         sector_indices = X_sector.index
         X_sector_base_random = LR_Base_random.loc[sector_indices]
         X_sector_yeo_random = LR_Yeo_random.loc[sector_indices]
+        
+        # For tree models, ensure random datasets only have numeric columns
+        if 'gics_sector' in feature_df.columns:
+            # Filter to numeric columns only
+            numeric_cols_base_random = [col for col in X_sector_base_random.columns 
+                                       if X_sector_base_random[col].dtype in ['int64', 'float64', 'bool']]
+            numeric_cols_yeo_random = [col for col in X_sector_yeo_random.columns 
+                                      if X_sector_yeo_random[col].dtype in ['int64', 'float64', 'bool']]
+            X_sector_base_random = X_sector_base_random[numeric_cols_base_random]
+            X_sector_yeo_random = X_sector_yeo_random[numeric_cols_yeo_random]
         
         # Simple train-test split for regular features
         X_train_base, X_test_base, y_train, y_test = train_test_split(
@@ -162,14 +209,14 @@ def run_sector_lightgbm_models(feature_df=None, score_df=None, base_columns=None
                 'X_train': X_train_base, 
                 'X_test': X_test_base, 
                 'type': 'Base',
-                'feature_list': base_columns
+                'feature_list': base_columns_sector
             },
             {
                 'name': f"Sector_LightGBM_{sector_name}_Yeo", 
                 'X_train': X_train_yeo, 
                 'X_test': X_test_yeo, 
                 'type': 'Yeo',
-                'feature_list': yeo_columns
+                'feature_list': yeo_columns_sector
             },
             {
                 'name': f"Sector_LightGBM_{sector_name}_Base_Random", 

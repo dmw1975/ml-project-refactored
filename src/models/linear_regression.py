@@ -18,11 +18,15 @@ from src.utils import io
 
 from sklearn.model_selection import train_test_split
 import numpy as np
+from src.data.train_test_split import get_or_create_split
 
 def perform_stratified_split_by_sector(X, y, test_size=0.2, random_state=42):
     """
     Performs a stratified train-test split based on GICS sectors, 
     but preserves ALL original features for model training.
+    
+    This function now uses the unified train/test split mechanism to ensure
+    consistency across all model types.
     
     Parameters
     ----------
@@ -39,35 +43,28 @@ def perform_stratified_split_by_sector(X, y, test_size=0.2, random_state=42):
     -------
     X_train, X_test, y_train, y_test : split data
     """
-    # Step 1: Identify sector columns
-    sector_columns = [col for col in X.columns if col.startswith('gics_sector_') or col.startswith('sector_')]
-
-    if len(sector_columns) == 0:
-        raise ValueError("No sector columns found in X!")
-
-    # Step 2: Create sector labels for stratification
-    sector_labels = np.zeros(len(X), dtype=int)
-    for i, col in enumerate(sector_columns):
-        sector_labels[X[col] == 1] = i
-
-    # Step 3: Perform stratified split (only use labels for splitting guidance)
-    train_idx, test_idx = train_test_split(
-        np.arange(len(X)),
-        test_size=test_size,
-        random_state=random_state,
-        stratify=sector_labels
-    )
-
-    # Step 4: Split the FULL feature set
-    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-
-    # Step 5: Print sector distribution for verification
-    print("Sector distribution check:")
-    for i, col in enumerate(sector_columns):
-        train_pct = X_train[col].mean() * 100
-        test_pct = X_test[col].mean() * 100
-        print(f"{col.replace('gics_sector_', '').replace('sector_', '')}: Train {train_pct:.1f}%, Test {test_pct:.1f}%")
+    # Use unified split mechanism
+    try:
+        # Try to use the unified split
+        # Note: X should have issuer_name as index from load_linear_models_data()
+        X_train, X_test, y_train, y_test = get_or_create_split(
+            X, y, test_size=test_size, random_state=random_state, 
+            stratify_column='gics_sector'  # Changed from 'sector' to match one-hot column pattern
+        )
+        
+        # Print sector distribution for verification
+        sector_columns = [col for col in X.columns if col.startswith('gics_sector_') or col.startswith('sector_')]
+        if sector_columns:
+            print("Sector distribution check:")
+            for col in sector_columns:
+                train_pct = X_train[col].mean() * 100
+                test_pct = X_test[col].mean() * 100
+                print(f"{col.replace('gics_sector_', '').replace('sector_', '')}: Train {train_pct:.1f}%, Test {test_pct:.1f}%")
+                
+    except Exception as e:
+        # No fallback - we want to ensure unified split is used
+        print(f"ERROR: Failed to use unified split: {e}")
+        raise RuntimeError(f"Must use unified train/test split for consistency. Error: {e}")
 
     return X_train, X_test, y_train, y_test
 
@@ -149,35 +146,48 @@ def train_all_models():
     """
     Train all linear regression model variants and save results.
     """
-    # Force reload data module to ensure latest version
+    # Use the new data loading with issuer_name indices
     import importlib
+    import src.data.data_categorical as data_cat
     import src.data as data
+    importlib.reload(data_cat)
     importlib.reload(data)
-    from src.data import load_features_data, load_scores_data, get_base_and_yeo_features, add_random_feature
+    from src.data.data_categorical import load_linear_models_data
+    from src.data import add_random_feature
     
-    print("Loading data...")
-    feature_df = load_features_data()
-    score_df = load_scores_data()
+    print("Loading data with issuer_name indices...")
+    feature_df, y = load_linear_models_data()
     
-    # Get feature sets with direct debug
-    LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
+    print(f"Loaded data: {feature_df.shape[0]} companies, {feature_df.shape[1]} features")
+    print(f"Index type: {type(feature_df.index)}")
+    print(f"Index name: {feature_df.index.name}")
+    print(f"Sample indices: {list(feature_df.index[:5])}")
+    
+    # Create feature sets directly to preserve index
+    # Get base features (non-Yeo columns)
+    base_columns = [col for col in feature_df.columns if not col.startswith('yeo_joh_')]
+    LR_Base = feature_df[base_columns].copy()
+    
+    # Get Yeo features (Yeo columns + categorical columns) - using ElasticNet's correct approach
+    yeo_prefix = 'yeo_joh_'
+    yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
+    original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
+    categorical_columns = [col for col in base_columns if col not in original_numerical_columns]
+    
+    # Create LR_Yeo with yeo-transformed numerical + categorical columns
+    complete_yeo_columns = yeo_transformed_columns + categorical_columns
+    LR_Yeo = feature_df[complete_yeo_columns].copy()
+    
+    print(f"Created LR_Base with {len(base_columns)} columns, index: {LR_Base.index.name}")
+    print(f"Created LR_Yeo with {len(complete_yeo_columns)} columns, index: {LR_Yeo.index.name}")
+    
+    # Categorical columns are already included in the feature sets
     
     # Direct feature count check before continuing
     print(f"\nDIRECT FEATURE COUNT CHECK (AFTER LOADING):")
     print(f"LR_Base column count: {len(LR_Base.columns)}")
     print(f"LR_Yeo column count: {len(LR_Yeo.columns)}")
     
-    # If LR_Yeo has less features, fix it directly here
-    if len(LR_Yeo.columns) < len(LR_Base.columns):
-        print(f"WARNING: LR_Yeo has fewer columns than expected, forcing fix...")
-        # Identify all Yeo-transformed columns
-        yeo_prefix = 'yeo_joh_'
-        yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
-        original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
-        categorical_columns = [col for col in LR_Base.columns if col not in original_numerical_columns]
-        complete_yeo_columns = yeo_transformed_columns + categorical_columns
-        LR_Yeo = feature_df[complete_yeo_columns].copy()
-        print(f"Fixed LR_Yeo column count: {len(LR_Yeo.columns)}")
     
     # FEATURE COUNT VALIDATION
     print("\n" + "="*50)
@@ -205,8 +215,8 @@ def train_all_models():
     print(f"LR_Yeo_random: {LR_Yeo_random.shape[1]} features")
     print("="*50)
     
-    # Target variable
-    y = score_df
+    # Target variable already loaded with correct indices
+    # y is already loaded from load_linear_models_data()
     
     print("\n==================================================")
     print("Running Linear Regression on All Feature Sets")
@@ -256,121 +266,6 @@ def train_all_models():
         print(f"{name}: {n_features} features")
     
     print("\nLinear regression models trained and saved successfully.")
-    return model_results
-
-def train_linear_with_elasticnet_params():
-    """Train linear models using the optimal ElasticNet parameters already found."""
-    print("Loading data...")
-    feature_df = load_features_data()
-    score_df = load_scores_data()
-    
-    # Get feature sets
-    LR_Base, LR_Yeo, base_columns, yeo_columns = get_base_and_yeo_features(feature_df)
-    
-    # Create versions with random features
-    LR_Base_random = add_random_feature(LR_Base)
-    LR_Yeo_random = add_random_feature(LR_Yeo)
-    
-    # Target variable
-    y = score_df
-    
-    # Load optimal ElasticNet parameters
-    try:
-        param_results = io.load_model("elasticnet_params.pkl", settings.MODEL_DIR)
-        print("Loaded optimal ElasticNet parameters")
-    except Exception as e:
-        print(f"Error loading optimal parameters: {e}")
-        print("Run ElasticNet parameter search first")
-        return
-    
-    print("\n==================================================")
-    print("Training Linear Models with Optimal ElasticNet Parameters")
-    print("==================================================")
-    
-    # Dictionary to store model results
-    model_results = {}
-    
-    # Map of dataset names
-    dataset_map = {
-        'LR_Base': LR_Base,
-        'LR_Yeo': LR_Yeo,
-        'LR_Base_Random': LR_Base_random,
-        'LR_Yeo_Random': LR_Yeo_random
-    }
-    
-    # Train models with optimal parameters
-    for param_result in param_results:
-        dataset_name = param_result['dataset']
-        alpha, l1_ratio = param_result['best_params']
-        
-        # Get the corresponding dataset
-        X_data = dataset_map.get(dataset_name)
-        if X_data is None:
-            print(f"Dataset {dataset_name} not found, skipping...")
-            continue
-        
-        model_name = f"{dataset_name}_elasticnet"
-        print(f"\nTraining {model_name} with optimal parameters:")
-        print(f"  alpha = {alpha}, l1_ratio = {l1_ratio}")
-        
-        # Use ElasticNet with the optimal parameters
-        from sklearn.linear_model import ElasticNet
-        
-        # Split data
-        X_train, X_test, y_train, y_test = perform_stratified_split_by_sector(
-            X_data, y, 
-            test_size=settings.LINEAR_REGRESSION_PARAMS['test_size'],
-            random_state=settings.LINEAR_REGRESSION_PARAMS['random_state']
-        )
-        
-        # Train model
-        model = ElasticNet(
-            alpha=alpha,
-            l1_ratio=l1_ratio,
-            random_state=settings.LINEAR_REGRESSION_PARAMS['random_state'],
-            max_iter=10000
-        )
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-        
-        # Calculate metrics
-        mse = mean_squared_error(y_test, y_pred)
-        mae = mean_absolute_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-        rmse = np.sqrt(mse)
-        n_features_used = np.sum(model.coef_ != 0)
-        
-        # Print results
-        print(f"  RMSE: {rmse:.4f}")
-        print(f"  MAE : {mae:.4f}")
-        print(f"  MSE : {mse:.4f}")
-        print(f"  R²  : {r2:.4f}")
-        print(f"  Features used: {n_features_used} out of {len(X_data.columns)}")
-        
-        # Store results
-        model_results[model_name] = {
-            'model_name': model_name,
-            'model': model,
-            'RMSE': rmse,
-            'MAE': mae,
-            'MSE': mse,
-            'R2': r2,
-            'alpha': alpha,
-            'l1_ratio': l1_ratio,
-            'n_features_used': n_features_used,
-            'n_companies': len(X_data),
-            'y_test': y_test,
-            'y_pred': y_pred
-        }
-    
-    # Save results
-    io.save_model(model_results, "linear_elasticnet_models.pkl", settings.MODEL_DIR)
-    
-    # Removed metrics DataFrame and CSV generation - Analysis showed linear_elasticnet_metrics.csv is NEVER READ
-    # Metrics are already stored in model PKL files - Date: 2025-01-15
-    # The DataFrame was only used for CSV export which has been removed
-    
-    print("\nLinear models with ElasticNet parameters trained and saved successfully.")
     return model_results
 
 if __name__ == "__main__":

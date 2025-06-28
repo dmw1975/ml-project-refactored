@@ -15,29 +15,56 @@ from src.utils import io
 
 logger = logging.getLogger(__name__)
 
-def load_features_data():
-    """Load features dataset."""
+def load_features_data(model_type='linear'):
+    """Load features dataset based on model type.
+    
+    Parameters
+    ----------
+    model_type : str
+        Type of model ('linear' or 'tree'). Defaults to 'linear'.
+        
+    Returns
+    -------
+    pd.DataFrame
+        Features dataframe
+    """
+    if model_type == 'linear':
+        # For linear models, use the linear models dataset
+        file_name = "combined_df_for_linear_models.csv"
+    elif model_type == 'tree':
+        # For tree models, use the tree models dataset
+        file_name = "combined_df_for_tree_models.csv"
+    else:
+        # Fall back to the general file for backward compatibility
+        file_name = settings.DATASET_FILES["features"]
+    
     # Try multiple potential locations for the features file
     potential_paths = [
-        settings.PROCESSED_DATA_DIR / settings.DATASET_FILES["features"],
-        Path("data/processed") / settings.DATASET_FILES["features"],
-        Path("data/raw") / settings.DATASET_FILES["features"],  # Added raw data path
-        Path("data") / settings.DATASET_FILES["features"],
-        Path(settings.DATASET_FILES["features"])
+        settings.RAW_DATA_DIR / file_name,  # Primary location
+        settings.PROCESSED_DATA_DIR / file_name,
+        Path("data/raw") / file_name,
+        Path("data/processed") / file_name,
+        Path("data") / file_name,
+        Path(file_name)
     ]
     
     # Try each path
     for path in potential_paths:
         if path.exists():
-            logger.info(f"Loading features from: {path}")
+            logger.info(f"Loading {model_type} features from: {path}")
             df = pd.read_csv(path)
             logger.info(f"Loaded features shape: {df.shape}")
             logger.debug(f"Feature columns: {df.columns.tolist()[:10]}... (showing first 10)")
+            
+            # NOTE: Data files are currently pre-normalized which breaks linear models
+            # Denormalization attempted but estimates don't match original scales
+            # Tree models still work reasonably well with normalized data
+            
             return df
     
     # If we can't find the file, raise a helpful error
     raise FileNotFoundError(
-        f"Could not find features file '{settings.DATASET_FILES['features']}'. "
+        f"Could not find {model_type} features file '{file_name}'. "
         f"Tried locations: {[str(p) for p in potential_paths]}"
     )
 
@@ -46,8 +73,9 @@ def load_scores_data():
     # Try multiple potential locations for the scores file
     potential_paths = [
         settings.PROCESSED_DATA_DIR / settings.DATASET_FILES["scores"],
+        settings.RAW_DATA_DIR / settings.DATASET_FILES["scores"],  # Use absolute path from settings
         Path("data/processed") / settings.DATASET_FILES["scores"],
-        Path("data/raw") / settings.DATASET_FILES["scores"],  # Added raw data path
+        Path("data/raw") / settings.DATASET_FILES["scores"],
         Path("data") / settings.DATASET_FILES["scores"],
         Path(settings.DATASET_FILES["scores"])
     ]
@@ -80,7 +108,10 @@ Replace the get_base_and_yeo_features function with this improved version.
 
 def get_base_and_yeo_features(feature_df):
     """
-    Get base features and Yeo-Johnson transformed features from pre-saved pickle files.
+    Get base features and Yeo-Johnson transformed features.
+    
+    This function first tries to use the new JSON metadata approach,
+    and falls back to pickle files if metadata is not available.
     
     Returns:
     --------
@@ -93,6 +124,15 @@ def get_base_and_yeo_features(feature_df):
     yeo_columns : list
         List of column names in LR_Yeo
     """
+    # First, try to use the new loader approach
+    try:
+        from src.data.loaders import get_base_and_yeo_features as new_get_features
+        logger.info("Attempting to use JSON metadata for feature loading...")
+        return new_get_features(feature_df)
+    except (ImportError, FileNotFoundError) as e:
+        logger.info(f"JSON metadata not available ({e}), falling back to pickle approach...")
+    
+    # Fallback to original pickle-based implementation
     import pickle
     from pathlib import Path
     
@@ -121,34 +161,44 @@ def get_base_and_yeo_features(feature_df):
     print(f"Base features in pickle: {len(base_columns)} columns")
     print(f"Yeo features in pickle: {len(yeo_columns_from_pickle)} columns")
     
-    # Filter columns to only include those available in the dataframe
-    available_base_columns = [col for col in base_columns if col in feature_df.columns]
+    # IMPORTANT: The pickle files are incomplete and only contain 26 numerical features
+    # We need to include ALL features from the dataframe, not just those in the pickle
     
-    # Create the base dataframe with available columns
-    LR_Base = feature_df[available_base_columns].copy()
+    # Get all columns from the dataframe
+    all_columns = list(feature_df.columns)
     
-    # CORRECTLY HANDLE YEO TRANSFORMATION:
+    # Identify categorical columns (one-hot encoded sectors)
+    categorical_columns = [col for col in all_columns if col.startswith('gics_sector_')]
+    
+    # Identify Yeo-transformed columns
     yeo_prefix = 'yeo_joh_'
+    yeo_transformed_columns = [col for col in all_columns if col.startswith(yeo_prefix)]
     
-    # 1. Identify all columns that have Yeo-transformed versions in the dataframe
-    yeo_transformed_columns = [col for col in feature_df.columns if col.startswith(yeo_prefix)]
-    
-    # 2. Get the original column names from the transformed ones
+    # Get the original column names from the transformed ones
     original_numerical_columns = [col.replace(yeo_prefix, '') for col in yeo_transformed_columns]
     
-    # 3. Identify categorical columns (those in base but not in original numerical)
-    categorical_columns = [col for col in available_base_columns 
-                          if col not in original_numerical_columns]
+    # Identify all numerical columns (those that are not categorical and have Yeo versions)
+    all_numerical_columns = [col for col in all_columns 
+                            if col not in categorical_columns 
+                            and not col.startswith(yeo_prefix)
+                            and col in feature_df.select_dtypes(include=[np.number]).columns]
+    
+    # Create base dataset with all numerical and categorical features
+    base_columns_to_use = all_numerical_columns + categorical_columns
+    LR_Base = feature_df[base_columns_to_use].copy()
+    
+    # Create Yeo dataset with transformed numerical and original categorical features
+    yeo_columns_to_use = yeo_transformed_columns + categorical_columns
+    LR_Yeo = feature_df[yeo_columns_to_use].copy()
     
     print(f"\nFeature type breakdown:")
-    print(f"  - Numerical features with Yeo transformations: {len(yeo_transformed_columns)}")
-    print(f"  - Categorical features (no transformation): {len(categorical_columns)}")
+    print(f"  - All numerical features: {len(all_numerical_columns)}")
+    print(f"  - Yeo-transformed features: {len(yeo_transformed_columns)}")
+    print(f"  - Categorical features: {len(categorical_columns)}")
     
-    # 4. Create Yeo dataset with both transformed numerical and original categorical features
-    complete_yeo_columns = yeo_transformed_columns + categorical_columns
-    
-    # 5. Create the Yeo dataframe
-    LR_Yeo = feature_df[complete_yeo_columns].copy()
+    # Update the return values to match
+    available_base_columns = base_columns_to_use
+    complete_yeo_columns = yeo_columns_to_use
     
     # Additional validation
     print(f"\nFinal dataset dimensions:")

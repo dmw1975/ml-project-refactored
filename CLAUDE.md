@@ -2,12 +2,90 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Recent Repository Cleanup (2025-06-22)
+
+A comprehensive repository cleanup was performed to improve organization and reduce clutter:
+
+### Cleanup Results
+- **Root directory**: Reduced from 150+ files to just 9 essential files
+- **Total files archived**: 82 files and 12 directories
+- **Total files deleted**: 135 temporary/diagnostic files
+- **Disk space saved**: ~5GB from removing old outputs
+- **Archive structure**: Created organized archive with 7 categories and 31 subdirectories
+
+### Key Changes
+1. All temporary diagnostic scripts moved to `archive/diagnostic_scripts/`
+2. Old documentation moved to `archive/documentation/` and `archive/deprecated_docs/`
+3. Feature removal scripts consolidated in `archive/feature_removal/`
+4. Cleanup operation files stored in `archive/cleanup_operation/`
+5. All pre-amendment outputs preserved in `archive/consolidated_outputs/`
+
+### Protected Files (Never Modified)
+- `xgboost_feature_removal_proper.py`
+- `archive_before_amendments_safe.py`
+- `CLAUDE.md`
+- `README.md`
+- `README-CLAUDE.md`
+
+### Pipeline Status
+✅ All pipeline functionality preserved and tested after cleanup
+✅ All models, data, and outputs remain accessible
+✅ Source code structure unchanged
+
 ## Build/Test Commands
 - Run all tests: `python test_setup.py && python test_features_data.py && python test_xgboost.py && python test_visualization.py && python test_sector_models.py`
 - Run a single test: `python <test_file.py>` (e.g., `python test_xgboost.py`)
 - Run with specific flags: `python main.py --<flag>` (common flags: `--train`, `--evaluate`, `--visualize`)
 - Format code: `black .`
 - Lint code: `flake8`
+
+## Sector Model Training
+When running `python main.py --all`, the following sector models are automatically trained:
+- **ElasticNet Sector Models**: Trained via `sector_elastic_net_models.py` (generates `sector_models_metrics.csv`)
+- **LightGBM Sector Models**: Trained via `sector_lightgbm_models.py` (generates `sector_lightgbm_metrics.csv`)
+
+For individual sector model training:
+- `python main.py --train-sector`: Trains LinearRegression sector models (via `sector_models.py`)
+- `python main.py --train-sector-lightgbm`: Trains LightGBM sector models only
+- `python main.py --all-sector`: Trains all sector model types
+
+## Data Loading Architecture
+The data loading system supports both JSON metadata (preferred) and pickle files (legacy):
+
+### ⚠️ CRITICAL ISSUE: Pre-normalized Data
+**The CSV files from esg-score-data repository contain pre-normalized (standardized) features with mean=0 and std=1. This causes:**
+- Linear Regression models to fail catastrophically (negative R² values)
+- ElasticNet models to converge to identical solutions
+- Loss of interpretability due to standardized coefficients
+
+**Current Status:**
+- Tree models (XGBoost, LightGBM, CatBoost) still work reasonably well
+- Linear models should not be used until data normalization is fixed
+- Proper solution requires non-normalized data files from esg-score-data
+
+### JSON Metadata Approach (New)
+When metadata files are available in `data/metadata/`:
+- `linear_model_columns.json`: Defines columns for linear models
+- `tree_model_columns.json`: Defines columns for tree models
+- `yeo_johnson_mapping.json`: Maps base to Yeo-transformed columns
+- `feature_groups.json`: Groups features by business logic
+
+The system uses `src/data/loaders.py` with:
+- `LinearModelDataLoader`: Loads data for linear models with one-hot encoding
+- `TreeModelDataLoader`: Loads data for tree models with native categorical features
+
+### Pickle Files Approach (Legacy)
+Falls back to pickle files if JSON metadata is not available:
+- `data/pkl/base_columns.pkl`: Contains base column names (incomplete)
+- `data/pkl/yeo_columns.pkl`: Contains Yeo column names (mixed content)
+
+**Note**: The pickle approach requires manual addition of categorical columns in model files.
+
+### Implementation Details
+- Data loading attempts JSON approach first, falls back to pickles if needed
+- Models automatically detect which approach is being used
+- No code changes required when switching between approaches
+- Denormalization was attempted but requires accurate original statistics
 
 ## Baseline Evaluation
 The baseline evaluation is automatically run during `python main.py --evaluate` or `python main.py --all`. It compares all models against Random, Mean, and Median baselines:

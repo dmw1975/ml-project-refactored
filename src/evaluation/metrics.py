@@ -355,7 +355,7 @@ def evaluate_models():
     # Run baseline comparison if there are models
     print("\nRunning baseline comparisons against random models...")
     try:
-        from evaluation.baselines import run_baseline_evaluation
+        from src.evaluation.baselines import run_baseline_evaluation
         baseline_comparison, baseline_summary = run_baseline_evaluation(all_models)
         print(f"Baseline comparison complete. Generated {len(baseline_summary)} model comparisons.")
         

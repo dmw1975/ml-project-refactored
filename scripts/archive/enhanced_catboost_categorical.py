@@ -14,6 +14,14 @@ from optuna.samplers import TPESampler
 import warnings
 import pickle
 from pathlib import Path
+import sys
+
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.append(str(project_root))
+
+# Import unified train/test split
+from src.data.train_test_split import get_or_create_split
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -147,26 +155,41 @@ def train_enhanced_catboost_categorical(X, y, dataset_name, categorical_columns,
                 # For non-categorical columns, just fill with 'Unknown'
                 X_clean[cat_feature] = X_clean[cat_feature].fillna('Unknown')
     
-    # Split data
-    # For stratification, find a categorical column without NaN values
-    stratify_col = None
-    for col in categorical_columns:
-        if col in X_clean.columns and X_clean[col].notna().all():
-            stratify_col = X_clean[col]
-            print(f"  Using {col} for stratification")
-            break
-    
-    if stratify_col is None:
-        # Use target bins for stratification
-        stratify_col = pd.qcut(y, q=min(10, len(y)//10), labels=False, duplicates='drop')
-        print("  Using target quantiles for stratification")
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_clean, y, test_size=test_size, random_state=random_state, stratify=stratify_col
+    # Use unified train/test split
+    # Use the unified split mechanism with original data (before cleaning)
+    print("  Using unified train/test split for consistency across models...")
+    X_train_orig, X_test_orig, y_train, y_test = get_or_create_split(
+        X, y, test_size=test_size, random_state=random_state, 
+        stratify_column='gics_sector'  # Use sector for stratification
     )
+    print(f"  Split successful: {len(X_train_orig)} train, {len(X_test_orig)} test samples")
+    
+    # Now apply the same cleaning to train and test sets
+    X_train = X_train_orig.copy()
+    X_test = X_test_orig.copy()
+    
+    # Handle missing values in categorical features for both train and test
+    for cat_feature in categorical_columns:
+        if cat_feature in X_train.columns:
+            # Handle categorical columns properly
+            if X_train[cat_feature].dtype.name == 'category':
+                # Add 'Unknown' category if needed
+                if 'Unknown' not in X_train[cat_feature].cat.categories:
+                    X_train[cat_feature] = X_train[cat_feature].cat.add_categories(['Unknown'])
+                X_train[cat_feature] = X_train[cat_feature].fillna('Unknown')
+                # Apply same to test
+                if 'Unknown' not in X_test[cat_feature].cat.categories:
+                    X_test[cat_feature] = X_test[cat_feature].cat.add_categories(['Unknown'])
+                X_test[cat_feature] = X_test[cat_feature].fillna('Unknown')
+            else:
+                # For non-categorical columns, just fill with 'Unknown'
+                X_train[cat_feature] = X_train[cat_feature].fillna('Unknown')
+                X_test[cat_feature] = X_test[cat_feature].fillna('Unknown')
+    print(f"  Train indices sample: {list(X_train_orig.index[:5])}")
+    print(f"  Test indices sample: {list(X_test_orig.index[:5])}")
     
     # Get categorical indices
-    cat_indices = [i for i, col in enumerate(X_clean.columns) if col in categorical_columns]
+    cat_indices = [i for i, col in enumerate(X_train.columns) if col in categorical_columns]
     
     results = {}
     
