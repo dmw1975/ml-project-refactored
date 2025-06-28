@@ -27,6 +27,21 @@
 - [Best Practices](#best-practices)
 - [Contributing](#contributing)
 
+## Data Setup Required
+
+**IMPORTANT**: Before running this pipeline, you must copy the required data files:
+
+1. Copy all files from `esg-score-eda/data/ml_output/` to `/mnt/d/ml_project_refactored/data/raw/`
+2. Required files include:
+   - `combined_df_for_linear_models.csv`
+   - `combined_df_for_tree_models.csv`
+   - `score.csv`
+
+```bash
+# Example copy command (adjust paths as needed):
+cp /path/to/esg-score-eda/data/ml_output/* /mnt/d/ml_project_refactored/data/raw/
+```
+
 ## Overview
 
 This ML pipeline is designed for ESG (Environmental, Social, and Governance) score prediction using multiple model types with comprehensive evaluation and visualization capabilities. The pipeline supports automated training, hyperparameter optimization, and extensive model comparison features.
@@ -534,7 +549,6 @@ outputs/
 
 ### Development Guidelines
 
-Following CLAUDE.md requirements:
 - **No standalone scripts**: All functionality integrates with main pipeline
 - **Direct modifications**: Change files in place, no patch generators
 - **Clean as you go**: Remove temporary files immediately
