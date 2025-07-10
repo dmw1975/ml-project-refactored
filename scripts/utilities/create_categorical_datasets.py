@@ -264,7 +264,7 @@ def main():
     
     # Define paths
     tree_input_path = RAW_DATA_DIR / 'combined_df_for_tree_models.csv'  # FIXED: Use tree-specific file
-    linear_input_path = RAW_DATA_DIR / 'combined_df_for_ml_models.csv'
+    linear_input_path = RAW_DATA_DIR / 'combined_df_for_linear_models.csv'
     tree_output_path = PROCESSED_DATA_DIR / 'tree_models_dataset.csv'
     linear_output_path = PROCESSED_DATA_DIR / 'linear_models_dataset.csv'
     
