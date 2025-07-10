@@ -31,6 +31,8 @@ def setup_logging(args):
         cmd_parts.append("evaluate")
     if args.visualize or args.visualize_new:
         cmd_parts.append("visualize")
+    if args.thesis_plots:
+        cmd_parts.append("thesis_plots")
     if args.all:
         cmd_parts.append("all")
     
@@ -92,6 +94,7 @@ def parse_args():
     parser.add_argument('--evaluate', action='store_true', help='Evaluate models')
     parser.add_argument('--visualize', action='store_true', help='Generate visualizations (uses new architecture)')
     parser.add_argument('--visualize-new', action='store_true', help='Generate visualizations using new architecture (same as --visualize)')
+    parser.add_argument('--thesis-plots', action='store_true', help='Generate thesis-specific plots (6 MUST HAVE plots)')
     parser.add_argument('--all', action='store_true', help='Run the entire pipeline')
     # Add these inside your ArgumentParser in parse_args()
     parser.add_argument('--train-sector', action='store_true', help='Train sector-specific models')
@@ -175,6 +178,46 @@ def main():
     
     # Import settings
     from src.config import settings
+    
+    # Check for processed data files and generate if missing
+    processed_data_path = settings.DATA_DIR / "processed" / "linear_models_dataset.csv"
+    if not processed_data_path.exists():
+        print("\n⚠️  Processed data files not found. Generating them now...")
+        print("   This is a one-time setup process.")
+        
+        # Check if raw data exists
+        raw_data_files = [
+            settings.DATA_DIR / "raw" / "combined_df_for_linear_models.csv",
+            settings.DATA_DIR / "raw" / "combined_df_for_tree_models.csv",
+            settings.DATA_DIR / "raw" / "score.csv"
+        ]
+        
+        missing_raw_files = [f for f in raw_data_files if not f.exists()]
+        if missing_raw_files:
+            print("\n❌ ERROR: Required raw data files are missing:")
+            for f in missing_raw_files:
+                print(f"   - {f}")
+            print("\nPlease add the required data files to the data/raw/ directory.")
+            print("See README.md for data setup instructions.")
+            return
+        
+        # Run the data preparation script
+        import subprocess
+        import sys
+        print("\n🔄 Running data preparation script...")
+        try:
+            result = subprocess.run(
+                [sys.executable, "scripts/utilities/create_categorical_datasets.py"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                print(f"❌ ERROR: Data preparation failed:\n{result.stderr}")
+                return
+            print("✅ Data preparation completed successfully!")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to run data preparation: {e}")
+            return
     
     # Helper function to log with timing
     def log_step(message, level=logging.INFO):
@@ -1550,7 +1593,37 @@ def run_additional_visualizations(args, step_times, use_state_manager=False, sta
             traceback.print_exc()
             step_times["Failed New Visualization"] = time.time() - step_start
             print("\nVisualization failed. Please check the error messages above.")
+    
+    # ==========================================
+    # Thesis-Specific Plots
+    # ==========================================
+    if args.thesis_plots:
+        print("\nGenerating thesis-specific plots (6 MUST HAVE visualizations)...")
+        step_start = time.time()
+        
+        try:
+            from src.visualization.plots.thesis import create_all_thesis_plots
+            from src.visualization.utils.io import load_all_models
             
+            # Load all models if not already loaded
+            if 'models' not in locals():
+                print("Loading all models for thesis plots...")
+                models = load_all_models()
+            
+            # Generate thesis plots
+            thesis_paths = create_all_thesis_plots(models, settings.VISUALIZATION_DIR)
+            
+            print(f"\nSuccessfully generated {len(thesis_paths)} thesis-specific plots:")
+            for path in thesis_paths:
+                print(f"  - {path.name}")
+            
+            step_times["Thesis Plots"] = time.time() - step_start
+            
+        except Exception as e:
+            print(f"Error generating thesis plots: {e}")
+            import traceback
+            traceback.print_exc()
+            step_times["Failed Thesis Plots"] = time.time() - step_start
 
     # Complete pipeline and print summary if using state manager
     if use_state_manager and state_manager:

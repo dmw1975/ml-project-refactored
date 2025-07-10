@@ -132,9 +132,44 @@ Key packages include:
 
 ## Quick Start
 
-### Basic Workflow
+### First-Time Setup
 
-1. **Run the complete pipeline**:
+1. **Clone the repository**:
+```bash
+git clone <repository-url>
+cd ml-project-refactored
+```
+
+2. **Install dependencies**:
+```bash
+pip install -r requirements.txt
+```
+
+3. **Verify setup** (optional but recommended):
+```bash
+python scripts/utilities/verify_setup.py
+```
+
+4. **Add raw data files** to `data/raw/`:
+   - Copy `combined_df_for_linear_models.csv`
+   - Copy `combined_df_for_tree_models.csv`
+   - Copy `score.csv`
+   - Copy metadata JSON files to `data/raw/metadata/`
+
+5. **Generate processed datasets**:
+```bash
+python scripts/utilities/create_categorical_datasets.py
+```
+Note: This step is now automatic - main.py will run it if needed.
+
+6. **Run the complete pipeline**:
+```bash
+python main.py --all
+```
+
+### Subsequent Runs
+
+After initial setup, you can simply run:
 ```bash
 python main.py --all
 ```
