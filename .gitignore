@@ -131,7 +131,16 @@ outputs_backup_*/
 
 # === DATA FOLDERS ===
 # Exclude all data files to avoid large uploads
-data/
+data/*.pkl
+data/*.json
+data/*.csv
+data/**/*.pkl
+data/**/*.json
+data/**/*.csv
+
+# But keep the directory structure with .gitkeep files
+!data/.gitkeep
+!data/**/.gitkeep
 
 # === MODELS AND LARGE FILES ===
 # Large model files
@@ -191,6 +200,10 @@ catboost_info/
 # Claude-specific documentation (as requested)
 CLAUDE.md
 README-CLAUDE.md
+
+# Narrative document
+narrative.md
+missing_narrative_plots.md
 
 # Cleanup and analysis reports
 CLEANUP_FINAL_REPORT.md
@@ -265,6 +278,17 @@ update_*.py
 # Documentation folder (supplementary docs)
 docs/
 
+# Debug and analysis files
+debug-output/
+*-debug.md
+*-analysis.md
+*-fix-*.md
+debug-changes-manifest.md
+*.log
+debug-*/
+*-diagnostic.py
+*-test-*.py
+
 # === IMAGES AND PLOTS ===
 # Exclude all images (they're generated outputs)
 *.png
@@ -298,3 +322,7 @@ scripts/archive/
 # ==============================================================================
 # End of .gitignore
 # ==============================================================================
+# Thesis-related temporary files
+thesis_plots_summary.md
+generate_thesis_plots.py
+missing_narrative_plots.md
